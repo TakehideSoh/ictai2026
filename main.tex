@@ -87,14 +87,131 @@ Sendai, Japan}
 \maketitle
 
 \begin{abstract}
-
+Zero-suppressed binary decision diagrams (ZDDs) are a standard data structure for compactly representing families of combinatorial solutions, and controlling the pathwidth of the input graph is known to be effective for keeping ZDDs small when they are constructed.
+In combinatorial reconfiguration, however, a ZDD-based solver must repeatedly perform transition computations on top of a solution-space ZDD, and it has remained unclear how much pathwidth affects the performance of such solvers.
+This paper investigates the impact of path decomposition as a preprocessing step for ZDD-based solvers for the independent set reconfiguration (ISR) problem.
+We integrate path decomposition into \textsc{ddreconf}, a state-of-the-art ZDD-based ISR solver, and analyze how it reduces ZDD size both at construction time and during reconfiguration.
+Computational experiments show that the proposed preprocessing consistently improves the performance of \textsc{ddreconf}.
+Moreover, even heuristic path decompositions that do not necessarily minimize pathwidth are sufficient to obtain substantial speedups in practice.
+As a result, our solver successfully solves several benchmark instances from the CoRe Challenge 2022 and 2023 that none of the participating solvers had previously solved.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Combinatorial reconfiguration, benchmark dataset, graph algorithm, PSPACE-complete
+Combinatorial reconfiguration, independent set reconfiguration, zero-suppressed binary decision diagram, path decomposition, pathwidth
 \end{IEEEkeywords}
 
 \section{Introduction}
+Combinatorial reconfiguration studies how one feasible solution of a combinatorial problem can be transformed into another through a sequence of small local changes~\cite{Nishimura18}.
+Among these problems, independent set reconfiguration (ISR) asks whether one independent set of a graph can be transformed into another by repeatedly adding or removing a single vertex, while maintaining the independent set property at every step.
+ISR is PSPACE-complete in general~\cite{MouawadNPR17}, and developing practically efficient solvers remains an active research topic.
+
+Zero-suppressed binary decision diagrams (ZDDs) provide a compact implicit representation of a family of sets and have been successfully applied to a wide range of combinatorial problems.
+It is well known that the size of a ZDD built from a graph is closely related to the pathwidth of the graph: smaller pathwidth often leads to smaller ZDDs.
+This observation has motivated path-decomposition-based techniques in many ZDD applications.
+
+In contrast, ZDD-based solvers for reconfiguration problems follow a different workflow.
+They first construct a ZDD representing the entire solution space and then repeatedly execute transition operations on this ZDD to search for a reconfiguration sequence.
+Although pathwidth is recognized as an important parameter for ZDD construction, its effect on the overall performance of reconfiguration solvers---including the cost of intermediate ZDD operations---has not been systematically studied.
+
+In this paper, we focus on ISR and analyze how path decomposition used as preprocessing affects ZDD-based reconfiguration solvers.
+Our main contributions are as follows:
+\begin{itemize}
+\item We analyze the effect of path decomposition as a preprocessing step for ZDD-based ISR solvers on the given input graph.
+\item Through computational experiments, we show that integrating the proposed preprocessing into the ZDD-based solver \textsc{ddreconf} improves its performance.
+\item We demonstrate that exact minimization of pathwidth is not necessary in practice: heuristic path decompositions already yield sufficient performance gains.
+\item Using the resulting solver, we solve several previously unsolved benchmark instances from the CoRe Challenge 2022 and 2023 on which none of the participating solvers had reported a solution.
+\end{itemize}
+
+The remainder of this paper is organized as follows.
+Section~\ref{sec:preliminaries} introduces ISR and reviews ZDD-based solvers.
+Section~\ref{sec:approach} presents our path-decomposition-based approach and its integration with \textsc{ddreconf}.
+Section~\ref{sec:analysis} analyzes why ZDD-based solvers suffer from large ZDD sizes and how path decomposition mitigates this issue.
+Section~\ref{sec:experiments} reports experimental results, including comparisons with \textsc{ddreconf} and newly solved instances.
+Section~\ref{sec:conclusion} concludes the paper.
+
+\section{Preliminaries}
+\label{sec:preliminaries}
+
+\subsection{Independent Set Reconfiguration}
+\begin{itemize}
+\item Definition of the independent set reconfiguration (ISR) problem.
+\item Token jumping / token sliding model (if needed).
+\item Complexity (PSPACE-completeness) and relationship to combinatorial reconfiguration.
+\item Benchmark instances used in this paper (e.g., CoRe Challenge).
+\end{itemize}
+
+\subsection{Overview of ZDD-Based Solvers}
+\begin{itemize}
+\item Brief review of ZDDs and their use in representing families of independent sets.
+\item Overview of \textsc{ddreconf} and the general workflow: solution-space ZDD construction followed by repeated transition computation.
+\item Role of variable ordering and graph structure in ZDD size.
+\end{itemize}
+
+\section{Our Approach}
+\label{sec:approach}
+
+\subsection{Path Decomposition and the Proposed Algorithm}
+\begin{itemize}
+\item Definition of path decomposition and pathwidth.
+\item Overview of the path-decomposition-based preprocessing algorithm.
+\item How the decomposed structure is used to determine a variable ordering for ZDD construction.
+\item Exact vs.\ heuristic path decomposition methods used in this paper.
+\end{itemize}
+
+\subsection{Integration with \textsc{ddreconf}}
+\begin{itemize}
+\item How path decomposition is incorporated into the \textsc{ddreconf} framework as a preprocessing step.
+\item Implementation details relevant to reconfiguration (variable ordering, interface between preprocessing and the solver).
+\item Summary of the overall algorithm pipeline.
+\end{itemize}
+
+\section{Analysis}
+\label{sec:analysis}
+
+\subsection{Bottlenecks of ZDD-Based Solvers}
+\begin{itemize}
+\item Solution-space ZDD construction tends to produce large numbers of ZDD nodes.
+\item ZDD node counts also grow during transition computation in reconfiguration search.
+\item Include plots illustrating these bottlenecks if available.
+\end{itemize}
+
+\subsection{Effect on Solution-Space ZDD Size}
+\begin{itemize}
+\item Analyze how path decomposition reduces the number of ZDD nodes at construction time.
+\item Compare ZDD sizes with and without path-decomposition-based preprocessing across benchmark instances.
+\end{itemize}
+
+\subsection{Effect on ZDD Size During Reconfiguration}
+\begin{itemize}
+\item Analyze how path decomposition affects intermediate ZDD sizes during transition computation.
+\item Explain why smaller intermediate ZDDs lead to faster reconfiguration search.
+\end{itemize}
+
+\section{Experimental Results}
+\label{sec:experiments}
+
+\subsection{Comparison with \textsc{ddreconf}}
+\begin{itemize}
+\item Experimental setup: hardware, benchmark suites, time limits, and parameter settings.
+\item Compare runtime, memory usage, and solved instance counts between the proposed solver and \textsc{ddreconf}.
+\item Summarize the overall performance improvement.
+\end{itemize}
+
+\subsection{Newly Solved Instances}
+\begin{itemize}
+\item Table listing benchmark instances from the CoRe Challenge 2022 and 2023 solved for the first time by our solver.
+\item Brief discussion of the characteristics of these instances.
+\item \KJ{TODO}{Replace ``xxx'' with the actual number of newly solved instances.}
+\end{itemize}
+
+\section{Conclusion}
+\label{sec:conclusion}
+\begin{itemize}
+\item Summarize the finding that path decomposition is an effective preprocessing technique for ZDD-based ISR solvers.
+\item Emphasize that heuristic path decompositions are sufficient for practical performance gains.
+\item Mention the newly solved CoRe Challenge instances.
+\item Future work: extension to other reconfiguration problems, tighter integration with other ZDD heuristics, etc.
+\end{itemize}
 
 \bibliographystyle{IEEEtran}
 \bibliography{bib}
