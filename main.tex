@@ -1,0 +1,102 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{xspace}
+\usepackage{complexity}
+\usepackage{color}
+
+\graphicspath{{figs/}}
+
+\newcommand{\ini}{\mathrm{s}}
+\newcommand{\tar}{\mathrm{t}}
+
+\newcommand{\TJ}{\textsc{Token Jumping}\xspace}
+\newcommand{\satisfiability}{\textsc{SAT}\xspace}
+\newcommand{\SR}{\textsc{SAT Reconfiguration}\xspace}
+\newcommand{\LCR}{\textsc{List Coloring Reconfiguration}\xspace}
+\newcommand{\SPR}{\textsc{Shortest Path Reconfiguration}\xspace}
+
+\newcommand{\SATseries}{\textsc{SAT} series\xspace}
+\newcommand{\LCseries}{\textsc{LC} series\xspace}
+\newcommand{\SPseries}{\textsc{SP} series\xspace}
+\newcommand{\ISseries}{\textsc{IS} series\xspace}
+
+\newcommand{\XSAT}{\textsc{SAT}\xspace}
+\newcommand{\XLC}{\textsc{LC}\xspace}
+\newcommand{\XSP}{\textsc{SP}\xspace}
+\newcommand{\XIS}{\textsc{IS}\xspace}
+\newcommand{\XRAND}{\textsc{RAND}\xspace}
+
+\newcommand{\snumfun}[1]{s_{#1}}
+\newcommand{\snum}[2]{\snumfun{#1}(#2)}
+
+\newcommand{\KJ}[2]{{\color{red} #2}}
+\newcommand{\KJQ}[1]{{\color{blue} #1}}
+
+\begin{document}
+
+\title{Efficiency of ZDD-Based Analyses for Independent Set Reconfiguration: A Pathwidth-Centric Study\thanks{This work was supported by JSPS KAKENHI Grant Numbers JP24H00686, JP24H00690, and JP23K12974.}}
+
+\author{\IEEEauthorblockN{Takehiro Ito}
+\IEEEauthorblockA{\textit{Graduate School of Information Sciences}\\
+\textit{Tohoku University}\\
+Sendai, Japan\\
+takehiro@tohoku.ac.jp}
+\and
+\IEEEauthorblockN{Jun Kawahara}
+\IEEEauthorblockA{\textit{Graduate School of Informatics}\\
+\textit{Kyoto University}\\
+Kyoto, Japan\\
+jkawahara@i.kyoto-u.ac.jp}
+\and
+\IEEEauthorblockN{Yasuaki Kobayashi}
+\IEEEauthorblockA{\textit{Faculty of Information Science and Technology}\\
+\textit{Hokkaido University}\\
+Sapporo, Japan\\
+koba@ist.hokudai.ac.jp}
+\and
+\IEEEauthorblockN{Yuta Nozaki}
+\IEEEauthorblockA{\textit{Faculty of Environment and Information Sciences}\\
+\textit{Yokohama National University}\\
+Yokohama, Japan\\
+\textit{WPI-SKCM$^2$, Hiroshima University}\\
+Hiroshima, Japan\\
+nozaki-yuta-vn@ynu.ac.jp}
+\and
+\IEEEauthorblockN{Kanae Sawamura}
+\IEEEauthorblockA{\textit{Graduate School of Information Sciences}\\
+\textit{Tohoku University}\\
+Sendai, Japan\\
+sawamura.kanae.r7@dc.tohoku.ac.jp}
+\and
+\IEEEauthorblockN{Takehide Soh}
+\IEEEauthorblockA{\textit{Information Infrastructure and Digital Transformation Initiatives Headquarters}\\
+\textit{Kobe University}\\
+Kobe, Japan\\
+soh@lion.kobe-u.ac.jp}
+\and
+\IEEEauthorblockN{Yuma Tamura}
+\IEEEauthorblockA{\textit{Graduate School of Information Sciences}\\
+\textit{Tohoku University}\\
+Sendai, Japan}
+}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\begin{IEEEkeywords}
+Combinatorial reconfiguration, benchmark dataset, graph algorithm, PSPACE-complete
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+\bibliographystyle{IEEEtran}
+\bibliography{bib}
+
+\end{document}
