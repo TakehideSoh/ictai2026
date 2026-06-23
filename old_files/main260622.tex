@@ -867,8 +867,8 @@ reconfiguration length, not the per-step ZDD size, governs the total cost.
   \label{fig:sp-scatter}
 \end{figure}
 
-\subsection{Reconfiguration Length}
-\label{subsec:reconflength}
+%\subsection{Reconfiguration Length}
+%\label{subsec:reconflength}
 
 A distinctive strength of the ZDD-based approach is its handling of long
 reconfiguration sequences.
@@ -876,11 +876,59 @@ By \PSPACE-completeness, a shortest reconfiguration sequence may be
 super-polynomially long (Section~\ref{subsec:isr}).
 Because \textsc{ddreconf} advances its breadth-first search by one transition
 layer at a time on top of a compressed solution-space ZDD, rather than unrolling
-the sequence length explicitly, it can in principle reach such long sequences.
+the sequence length explicitly, it can in principle reach such long sequences,
+in contrast to bounded-model-checking solvers that increase the target length
+one step at a time.
 We examine this on our data.
 
+Table~\ref{tab:reconflen} groups the instances by the length $\ell$ of the
+reconfiguration sequence and reports, within the opt-available population and for
+instances solved within $30$ minutes, how many each decomposition solves.
+%% TODO: the population here is opt-available instances solved within 30 min, so
+%% that the length is established under the same protocol; revisit if the setup
+%% population description changes.
 The instances span more than five orders of magnitude in $\ell$, from $1$ up to
 about $2.2\times10^{5}$, and all are solved within the limit.
+In the long-length ranges ($\ell>10^{4}$) the three decompositions solve exactly the
+same instances, whereas the differences between them are concentrated in the
+short-to-medium range, which corresponds to the wider graphs.
+Within this population, \OptDecom solves every instance that any decomposition solves.
+(On the shortest variant there are in addition $10$ instances with no
+reconfiguration sequence, all of which are resolved by all three decompositions; the
+farthest variant has none.)
+
+\begin{table}[t]
+  \centering
+  \caption{Number of instances solved within $30$ minutes, grouped by
+  reconfiguration sequence length $\ell$, on the opt-available population.
+  Column ``\#'' is the number of such instances solved by at least one decomposition.}
+  \label{tab:reconflen}
+  \begin{tabular}{llrrrr}
+    \hline
+    variant & length $\ell$ & \# & \OrigDecom & \HeurDecom & \OptDecom \\
+    \hline
+    \multirow{7}{*}{shortest}
+      & $1 \le \ell \le 10$        & $86$  & $83$  & $85$  & $86$  \\
+      & $10 < \ell \le 10^{2}$     & $33$  & $28$  & $32$  & $33$  \\
+      & $10^{2} < \ell \le 10^{3}$ & $47$  & $47$  & $47$  & $47$  \\
+      & $10^{3} < \ell \le 10^{4}$ & $27$  & $27$  & $27$  & $27$  \\
+      & $10^{4} < \ell \le 10^{5}$ & $13$  & $13$  & $13$  & $13$  \\
+      & $\ell > 10^{5}$            & $2$   & $2$   & $2$   & $2$   \\
+      \cline{2-6}
+      & total                      & $208$ & $200$ & $206$ & $208$ \\
+    \hline
+    \multirow{7}{*}{farthest}
+      & $1 \le \ell \le 10$        & $63$  & $62$  & $63$  & $63$  \\
+      & $10 < \ell \le 10^{2}$     & $66$  & $57$  & $63$  & $66$  \\
+      & $10^{2} < \ell \le 10^{3}$ & $43$  & $43$  & $43$  & $43$  \\
+      & $10^{3} < \ell \le 10^{4}$ & $31$  & $31$  & $31$  & $31$  \\
+      & $10^{4} < \ell \le 10^{5}$ & $12$  & $12$  & $12$  & $12$  \\
+      & $\ell > 10^{5}$            & $3$   & $3$   & $3$   & $3$   \\
+      \cline{2-6}
+      & total                      & $218$ & $208$ & $215$ & $218$ \\
+    \hline
+  \end{tabular}
+\end{table}
 
 The longest sequences are reached precisely because they occur in narrow graphs.
 Figure~\ref{fig:reconf-length} plots, for every instance solved under
@@ -902,6 +950,8 @@ The most extreme case is a power-network instance with $199$ vertices, $302$
 edges, and width $5$, whose shortest variant admits a sequence of length
 $\ell=221{,}003$ and is solved in about $1{,}700$ seconds (its farthest variant,
 $\ell=221{,}016$, is comparable).
+A solver that increases the target length one step at a time would require on the
+order of $2\times10^{5}$ iterations to certify such a sequence.
 
 \begin{figure}[t]
   \centering
