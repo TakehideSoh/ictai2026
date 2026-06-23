@@ -9,6 +9,8 @@
 \usepackage{color}
 \usepackage{comment}
 \usepackage{multirow}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
 
 \graphicspath{{figs/}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
@@ -199,6 +201,97 @@ We evaluate this idea on two variants that probe the solution space in
 complementary ways: the shortest variant, which seeks a shortest reconfiguration
 sequence between two given independent sets, and the farthest variant, which
 seeks an independent set farthest from a given one.
+Figure~\ref{fig:core-example} illustrates a benchmark instance from the CoRe
+Challenge 2023~\cite{sotaokit24}: each node of the solution-space graph on the
+right is an independent set of size $3$, and two nodes are adjacent when one can
+be reached from the other by a single token jump.
+
+\begin{figure*}[t]
+\centering
+\begin{minipage}[t]{0.46\textwidth}
+\centering
+\begin{tikzpicture}[thick, scale=.7, yscale=.8,
+    vertex/.style={draw, circle, black, inner sep=1.5pt},
+    token/.style={vertex, fill={rgb:black,1;white,2}},
+    gedge/.style={line width=1.2pt}
+]
+    \node[vertex] (4a) at (-1,-1) {4};
+    \node[token] (3a) at (-1,0) {3};
+    \node[token] (6a) at (0,-1) {6};
+    \node[vertex] (5a) at (0,0) {5};
+    \node[vertex] (1a) at (-1,1) {1};
+    \node[vertex] (2a) at (1,1) {2};
+    \node[token] (7a) at (1,-1) {7};
+    \draw[gedge] (1a) -- (2a);
+    \draw[gedge] (1a) -- (3a);
+    \draw[gedge] (2a) -- (7a);
+    \draw[gedge] (3a) -- (4a);
+    \draw[gedge] (3a) -- (5a);
+    \draw[gedge] (4a) -- (6a);
+    \draw[gedge] (5a) -- (6a);
+    \node[below=3mm, font=\small] at (0,-1.3) {$I_\ini = \{3,6,7\}$};
+\end{tikzpicture}\\[-1mm]
+{\small Problem graph $G$ (filled vertices are tokens in $I_\ini$)}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.52\textwidth}
+\centering
+\begin{tikzpicture}[x=0.72cm,y=0.72cm,
+    sol/.style={rectangle,draw,thick,fill=white,rounded corners=2pt,
+        minimum width=13mm,minimum height=7mm,inner sep=1pt,font=\scriptsize},
+    start/.style={fill=blue!12,draw=blue!70!black,very thick},
+    target/.style={fill=red!10,draw=red!70!black,very thick},
+    far/.style={fill=orange!18,draw=orange!80!black,very thick},
+    solline/.style={line width=1.0pt},
+    shortest/.style={line width=1.4pt,blue!70!black,-{Stealth[length=1.8mm]}},
+    farline/.style={line width=1.4pt,orange!85!black,-{Stealth[length=1.8mm]}}
+]
+    \coordinate (a) at (0,0);
+    \coordinate (b) at (2.2,0);
+    \coordinate (c) at (0,-1.35);
+    \coordinate (d) at (4.4,0.85);
+    \coordinate (e) at (4.4,-0.85);
+    \coordinate (f) at (6.7,0.85);
+    \coordinate (g) at (6.7,-0.85);
+    \coordinate (h) at (8.9,-0.85);
+    \draw[solline] (a) -- (b);
+    \draw[solline] (a) -- (c);
+    \draw[solline] (b) -- (d);
+    \draw[solline] (b) -- (e);
+    \draw[solline] (d) -- (e) -- (g) -- (f) -- (d);
+    \draw[solline] (d) -- (g);
+    \draw[solline] (e) -- (f);
+    \draw[solline] (f) -- (h);
+    \draw[solline] (g) -- (h);
+    \draw[shortest] (a) -- (b);
+    \draw[shortest] (b) -- (e);
+    \draw[shortest] (e) -- (g);
+    \draw[farline] (b) -- (d);
+    \draw[farline] (d) -- (f);
+    \draw[farline] (f) -- (h);
+    \node[sol,start] at (a) {$\{3,6,7\}$};
+    \node[sol] at (b) {$\{1,6,7\}$};
+    \node[sol] at (c) {$\{2,3,6\}$};
+    \node[sol] at (d) {$\{1,4,7\}$};
+    \node[sol] at (e) {$\{1,5,7\}$};
+    \node[sol] at (f) {$\{1,4,5\}$};
+    \node[sol,target] at (g) {$\{4,5,7\}$};
+    \node[sol,far] at (h) {$\{2,4,5\}$};
+    \node[above=1mm, font=\scriptsize] at (a) {$I_\ini$};
+    \node[below=1mm, font=\scriptsize] at (g) {$I_\tar$};
+    \node[below=1mm, font=\scriptsize] at (h) {farthest};
+\end{tikzpicture}\\[-1mm]
+{\small Solution-space graph (blue: shortest path, orange: farthest path)}
+\end{minipage}
+\caption{A CoRe Challenge 2023 instance with $|I_\ini|=3$.
+Left: the input graph $G$ with start independent set
+$I_\ini=\{3,6,7\}$ (filled vertices).
+Right: the solution-space graph under token jumping; the shortest variant asks
+for a shortest path from $I_\ini$ to $I_\tar=\{4,5,7\}$ (distance~$3$), and the
+farthest variant asks for an independent set farthest from $I_\ini$ (distance~$4$,
+e.g.\ $\{2,4,5\}$).}
+\label{fig:core-example}
+\end{figure*}
+
 Our main contributions are as follows:
 \begin{itemize}
 \item We show, through computational experiments, that reordering the input edges
