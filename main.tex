@@ -11,6 +11,7 @@
 \usepackage{multirow}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
+\usepackage{url}
 
 \graphicspath{{figs/}}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
@@ -33,6 +34,7 @@
 \newcommand{\ini}{\mathrm{s}}
 \newcommand{\tar}{\mathrm{t}}
 
+
 \newcommand{\X}{\mathcal{X}}
 \newcommand{\Z}{\mathcal{Z}}
 \newcommand{\sets}{\mathcal{S}}
@@ -50,10 +52,15 @@
 \newcommand{\OptDecom}{\textsf{opt}\xspace}
 
 \newcommand{\TJ}{\textsc{Token Jumping}\xspace}
+\newcommand{\ISR}{\textsc{ISR}\xspace}
+\newcommand{\TJrule}{\textsc{TJ}\xspace}
+
 \newcommand{\satisfiability}{\textsc{SAT}\xspace}
 \newcommand{\SR}{\textsc{SAT Reconfiguration}\xspace}
 \newcommand{\LCR}{\textsc{List Coloring Reconfiguration}\xspace}
 \newcommand{\SPR}{\textsc{Shortest Path Reconfiguration}\xspace}
+
+
 
 \newcommand{\SATseries}{\textsc{SAT} series\xspace}
 \newcommand{\LCseries}{\textsc{LC} series\xspace}
@@ -78,6 +85,10 @@
 %\thanks{This work was supported by JSPS KAKENHI Grant Numbers JP24H00686, JP24H00690, and JP23K12974.}}
 
 \author{
+\IEEEauthorblockN{Anonymous authors}
+\IEEEauthorblockA{}
+}
+\begin{comment}
 \IEEEauthorblockN{Kanae Sawamura}
 \IEEEauthorblockA{\textit{Graduate School of Information Sciences}\\
 \textit{Tohoku University}\\
@@ -120,34 +131,34 @@ jkawahara@i.kyoto-u.ac.jp}
 \textit{Tohoku University}\\
 Sendai, Japan\\
 takehiro@tohoku.ac.jp}
-}
+\end{comment}
 
 \maketitle
 
 \begin{abstract}
-Zero-suppressed binary decision diagrams (ZDDs) are a standard data structure for
-compactly representing families of combinatorial solutions, and reducing the
-width of the path decomposition used to construct a ZDD is known to be effective
-for keeping it small.
-In combinatorial reconfiguration, however, a ZDD-based solver must build a
-solution-space ZDD and then repeatedly perform transition computations on top of
-it, and how much this width affects the end-to-end performance of such solvers has
-remained unclear.
-This paper studies path decomposition as a preprocessing step for the ZDD-based
-independent set reconfiguration (ISR) solver \textsc{ddreconf} under the token
-jumping rule.
-By reordering the input edges according to a computed path decomposition, we
-shrink the solution-space ZDD and improve the overall performance of
-\textsc{ddreconf}, without modifying the solver itself.
-Computational experiments on two variants of the problem, the shortest and the
-farthest variant, show that the preprocessing consistently reduces ZDD size,
-memory usage, and running time, and increases the number of instances solved
-within the time limit.
-Moreover, computing an optimal path decomposition is unnecessary in practice: a
-fast heuristic decomposition attains essentially the same width and the same
-gains, and on large instances, for which the optimal pathwidth cannot be computed
-in reasonable time, the heuristic is the only option that lets the solver reach
-them.
+Zero-suppressed binary decision diagrams (ZDDs) compactly represent families of
+combinatorial solutions, and it is well known that building a ZDD along a path
+decomposition of small width keeps it small. Solvers for combinatorial
+reconfiguration, however, use a ZDD in a more demanding way: they first build a
+ZDD of the entire solution space and then repeatedly rebuild ZDDs as the search
+advances, one transition step at a time. Whether, and how much, a small-width
+decomposition helps such a solver overall has been unclear, once the cost of
+these repeated computations and of computing the decomposition itself is taken
+into account.
+We study path decomposition as a preprocessing step for \textsc{ddreconf}, a
+state-of-the-art ZDD-based solver for independent set reconfiguration under the
+token jumping rule. The preprocessing only reorders the input edges along a
+small-width decomposition; the solver itself is left untouched. On both the
+shortest and the farthest variant of the problem, the reordering consistently
+reduces ZDD size, memory, and running time, and lets the solver clear more
+instances within the time limit. Computing an optimal decomposition turns out to
+be unnecessary: a fast heuristic reaches essentially the same width and the same
+gains, and on large instances, whose optimal pathwidth is out of reach, it is the
+only option that lets the solver finish at all. Tracing the effect of width
+through the solver, we find that it shapes not only the solution-space ZDD but
+also the intermediate ZDDs rebuilt at every step, so its benefit extends across
+the whole search; and the width of the decomposition, rather than the size of the
+graph, turns out to be a strong predictor of whether an instance can be solved.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -155,52 +166,17 @@ Combinatorial reconfiguration, independent set reconfiguration, zero-suppressed 
 \end{IEEEkeywords}
 
 \section{Introduction}
-Combinatorial reconfiguration studies how one feasible solution of a
-combinatorial problem can be transformed into another through a sequence of small
-local changes~\cite{nishimura18}.
-Among these problems, independent set reconfiguration (ISR) asks whether one
-independent set of a graph can be transformed into another by a sequence of small
-changes that keeps an independent set at every step.
-In this paper we adopt the token jumping rule, in which each step moves a single
-token to another vertex, equivalently, removes one vertex from the current
-independent set and adds one vertex outside it.
-ISR is PSPACE-complete in general~\cite{kamemi12,itdehapasiueun11}, and developing
-practically efficient solvers remains an active research topic.
+Combinatorial reconfiguration asks how one feasible solution of a combinatorial
+problem can be turned into another through a sequence of small local changes, with
+every intermediate step also feasible~\cite{nishimura18}. A prototypical example
+is independent set reconfiguration (\ISR): given two independent sets of a graph,
+can one be transformed into the other by moving the tokens placed on its vertices,
+keeping an independent set throughout? We adopt the token jumping rule, in which
+each step moves a single token to another vertex, equivalently, swaps one vertex
+of the current independent set for a vertex outside it. \ISR is \PSPACE-complete in
+general~\cite{kamemi12,itdehapasiueun11}, and building solvers that are efficient
+in practice remains an active line of work.
 
-Zero-suppressed binary decision diagrams (ZDDs) provide a compact implicit
-representation of a family of sets and have been successfully applied to a wide
-range of combinatorial problems.
-It is well known that the size of a ZDD built from a graph is closely related to
-the pathwidth of the graph: a smaller pathwidth often leads to a smaller
-ZDD~\cite{inoue16}.
-This observation has motivated path-decomposition-based techniques in many ZDD
-applications, where reordering the variables according to a good path
-decomposition keeps the constructed ZDD small.
-
-ZDD-based solvers for reconfiguration problems, however, follow a different
-workflow.
-They first construct a ZDD representing the entire solution space and then
-repeatedly execute transition operations on this ZDD to search for a
-reconfiguration sequence.
-Although a path decomposition of small width is known to help the first step,
-the construction of the solution-space ZDD, it has remained unclear how much it
-helps the solver as a whole, once the cost of the subsequent transition
-computation and the cost of computing the decomposition itself are taken into
-account.
-
-In this paper, we study path decomposition as a preprocessing step for the
-state-of-the-art ZDD-based ISR solver \textsc{ddreconf}~\cite{ItoKNSSTT23} under
-the token jumping rule.
-The input to \textsc{ddreconf} is a graph given as an ordered list of edges, and
-the solver processes these edges in the given order; this order determines the
-width of the path decomposition that the solver implicitly works with, and hence
-the sizes of the ZDDs it builds.
-Our preprocessing simply reorders the edges according to a path decomposition of
-small width, leaving the solver itself untouched.
-We evaluate this idea on two variants that probe the solution space in
-complementary ways: the shortest variant, which seeks a shortest reconfiguration
-sequence between two given independent sets, and the farthest variant, which
-seeks an independent set farthest from a given one.
 Figure~\ref{fig:core-example} illustrates a benchmark instance from the CoRe
 Challenge 2023~\cite{sotaokit24}: each node of the solution-space graph on the
 right is an independent set of size $3$, and two nodes are adjacent when one can
@@ -245,9 +221,9 @@ be reached from the other by a single token jump.
     shortest/.style={line width=1.4pt,blue!70!black,-{Stealth[length=1.8mm]}},
     farline/.style={line width=1.4pt,orange!85!black,-{Stealth[length=1.8mm]}}
 ]
-    \coordinate (a) at (0,0);
+    \coordinate (a) at (0,0.85);
     \coordinate (b) at (2.2,0);
-    \coordinate (c) at (0,-1.35);
+    \coordinate (c) at (0,-0.85);
     \coordinate (d) at (4.4,0.85);
     \coordinate (e) at (4.4,-0.85);
     \coordinate (f) at (6.7,0.85);
@@ -276,13 +252,13 @@ be reached from the other by a single token jump.
     \node[sol] at (f) {$\{1,4,5\}$};
     \node[sol,target] at (g) {$\{4,5,7\}$};
     \node[sol,far] at (h) {$\{2,4,5\}$};
-    \node[above=1mm, font=\scriptsize] at (a) {$I_\ini$};
-    \node[below=1mm, font=\scriptsize] at (g) {$I_\tar$};
-    \node[below=1mm, font=\scriptsize] at (h) {farthest};
+    \node[above=3mm, font=\scriptsize] at (a) {$I_\ini$};
+    \node[below=3mm, font=\scriptsize] at (g) {$I_\tar$};
+    \node[below=3mm, font=\scriptsize] at (h) {farthest};
 \end{tikzpicture}\\[-1mm]
 {\small Solution-space graph (blue: shortest path, orange: farthest path)}
 \end{minipage}
-\caption{A CoRe Challenge 2023 instance with $|I_\ini|=3$.
+\caption{An \ISR instance with $|I_\ini|=3$.
 Left: the input graph $G$ with start independent set
 $I_\ini=\{3,6,7\}$ (filled vertices).
 Right: the solution-space graph under token jumping; the shortest variant asks
@@ -292,29 +268,85 @@ e.g.\ $\{2,4,5\}$).}
 \label{fig:core-example}
 \end{figure*}
 
-Our main contributions are as follows:
+%Zero-suppressed binary decision diagrams (ZDDs) are a compact implicit
+%representation of a family of sets, and they underlie several recent
+%reconfiguration solvers. When a ZDD is built from a graph, its size is closely
+%tied to the pathwidth of the graph: roughly speaking, the smaller the pathwidth,
+%the smaller the ZDD~\cite{inoue16}. This connection is the basis of a standard
+%speedup in many ZDD applications, namely to order the variables along a path
+%decomposition of small width so that the constructed ZDD stays small.
+
+
+% ZDD の導入を自然に
+% 他とのソルバーの比較を行う。ZDD-based ソルバーの長所を述べる
+To address this computational hardness, various practical approaches have been
+developed, including Answer Set Programming (ASP)-based
+solvers~\cite{ybisu24} and AI-planning techniques~\cite{cherkamupeposesisp23},
+both of which excel at finding short reconfiguration sequences. Another line of
+work uses zero-suppressed binary decision diagrams (ZDDs)~\cite{Minato1993}, compact data structures
+for implicitly representing families of sets. By using ZDDs to compress
+structural regularity in the solution space, ZDD-based solvers provide a
+complementary approach and can sometimes outperform ASP and planning methods,
+especially on instances whose solution spaces admit compact ZDD representations~\cite{ItoKNSSTT23}.
+When a ZDD is built from a graph, its size is
+closely tied to the pathwidth of the graph: roughly speaking, the smaller the
+pathwidth, the smaller the ZDD~\cite{inoue16}. This connection is the basis of a
+standard speedup in many ZDD applications, namely ordering variables along a
+small-width path decomposition to keep the constructed ZDD small.
+
+
+%Reconfiguration solvers, however, use a ZDD in a two-stage way that complicates
+In such solvers, this representation is used in a two-stage way, which complicates
+the picture. They first construct a ZDD representing the entire solution space,
+and then repeatedly apply transition operations to the diagram, advancing the search one
+step at a time until a reconfiguration sequence is found. A small-width
+decomposition is known to help the first stage, the construction of the
+solution-space ZDD. It has remained unclear how much it helps the solver as a
+whole, once one also accounts for the cost of the repeated transition computations
+and for the cost of computing the decomposition in the first place.
+
+
+
+We study path decomposition as a preprocessing step for
+\textsc{ddreconf}~\cite{ItoKNSSTT23}, an implementation of a state-of-the-art ZDD-based
+solver for \ISR
+under the token jumping rule. \textsc{ddreconf} reads a graph as an ordered list
+of edges and processes them in that order; this order fixes the path
+decomposition the solver implicitly follows, and hence the sizes of the ZDDs it
+builds. Our preprocessing simply reorders the edges along a path decomposition of
+small width and leaves the solver itself untouched. We evaluate the idea on two
+variants that probe the solution space in complementary ways: the shortest
+variant, which looks for a shortest reconfiguration sequence between two given
+independent sets, and the farthest variant, which looks for an independent set as
+far as possible from a given one. Our contributions are as follows.
 \begin{itemize}
-\item We show, through computational experiments, that reordering the input edges
-by a path decomposition consistently improves \textsc{ddreconf}: it shrinks the
-solution-space ZDD and reduces running time and memory, and it increases the
-number of instances solved within the time limit, on both the shortest and the
-farthest variant.
-\item We show that computing an optimal path decomposition is unnecessary in
-practice. A fast heuristic decomposition attains essentially the same width as
-the optimal one and yields comparable gains; furthermore, on large instances
-whose optimal pathwidth cannot be computed in reasonable time, the heuristic is
-the only one of the two that lets the solver reach them.
-\item We find that the width of the decomposition used by the solver is a strong
-predictor of whether an instance can be solved, more so than the size of the
-graph.
+\item We show experimentally that reordering the input edges along a path
+decomposition consistently improves \textsc{ddreconf}: it shrinks the
+solution-space ZDD, lowers running time and memory, and increases the number of
+instances solved within the time limit, on both the shortest and the farthest
+variant.
+\item We show that an optimal decomposition is unnecessary in practice. A fast
+heuristic decomposition reaches essentially the same width as the optimal one and
+brings the same gains; moreover, on large instances whose optimal pathwidth cannot
+be computed in reasonable time, the heuristic is the only one of the two that lets
+the solver reach them at all.
+\item We trace where the gains come from and find that the decomposition width
+shapes not only the solution-space ZDD but also the intermediate ZDDs that are
+rebuilt at every transition step, so its effect extends across the whole search.
+The exceptions form a recognizable class of structured instances whose pathwidth
+is a loose upper bound on the actual ZDD size.
+\item We find that the width of the decomposition the solver works with, rather
+than the size of the input graph, is a strong predictor of whether an instance can
+be solved.
 \end{itemize}
 
-The remainder of this paper is organized as follows.
-Section~\ref{sec:preliminaries} introduces ISR and reviews ZDD-based solvers.
-Section~\ref{sec:approach} presents our path-decomposition-based preprocessing
-and its integration with \textsc{ddreconf}.
-Section~\ref{sec:experiments} reports experimental results.
-Section~\ref{sec:conclusion} concludes the paper.
+The rest of the paper is organized as follows. Section~\ref{sec:preliminaries}
+introduces \ISR and reviews ZDD-based solvers. Section~\ref{sec:approach} describes
+our path-decomposition preprocessing and its integration with \textsc{ddreconf}.
+Section~\ref{sec:experiments} reports the experimental results, and
+Section~\ref{sec:analyses} analyzes where the gains come from by following the
+effect of width through the two stages of the solver.
+Section~\ref{sec:conclusion} concludes.
 
 
 \section{Preliminaries}
@@ -323,89 +355,102 @@ Section~\ref{sec:conclusion} concludes the paper.
 \subsection{Independent Set Reconfiguration}
 \label{subsec:isr}
 
-Let $G=(V,E)$ be an undirected graph, where $V$ is the set of vertices and $E$
-is the set of edges. A vertex subset $I\subseteq V$ is an \emph{independent set
-of $G$} if no two vertices in $I$ are adjacent in $G$.
-Henceforth, we refer to each vertex contained in an independent set as a
-\emph{token}.
-Two independent sets $I$ and $I'$ of $G$ are \emph{adjacent} under the
-\emph{Token Jumping} (TJ) rule if $|I \bigtriangleup I'| = 2$, namely, $I'$ can
-be obtained from $I$ by moving a single token in $I$ to another vertex that is
-not in $I$, and vice versa.
-Then, for two independent sets $I_\ini$ and $I_\tar$ of $G$ such that
-$|I_\ini|=|I_\tar|$, a \emph{reconfiguration sequence} between $I_\ini$ and
-$I_\tar$ is a sequence $\langle I_0, I_1, \ldots, I_\ell \rangle$ such that:
-\begin{listing}{-}
-\item[-] $I_0 = I_\ini$ and $I_\ell = I_\tar$;
-\item[-] $I_i$ is an independent set of $G$ such that $|I_i| = |I_\ini| = |I_\tar|$, for each $i$, $0 \leq i \leq \ell$;
-\item[-] $I_i$ and $I_{i+1}$ are adjacent under TJ for each $i$, $0 \le i \le \ell-1$.
-\end{listing}
-Then, the \emph{Independent Set Reconfiguration Problem} (ISRP) under TJ is to
-determine whether there exists a reconfiguration sequence between $I_\ini$ and
-$I_\tar$. This problem is known to be \PSPACE-complete~\cite{kamemi12}.
-The \PSPACE-completeness implies that there are yes-instances such that even a
-shortest reconfiguration sequence has super-polynomial length, under the
-assumption that $\PSPACE \neq \NP$.
+Let $G=(V,E)$ be an unweighted and undirected graph, where $V$ is the set of vertices and $E$ is the set of edges. 
+A vertex subset $I\subseteq V$ is an \emph{independent set of $G$} if no two vertices in $I$ are adjacent in $G$.
+For a positive integer $k$, the \emph{solution space} $\mathcal{S}_k(G)$ is a graph whose nodes are the independent sets of $G$ with size $k$; two nodes are joined by an edge in $\mathcal{S}_k(G)$ if and only if the corresponding independent sets $I$ and $I'$ satisfy $|I \setminus I'| = |I' \setminus I| = 1$. (See \figurename~\ref{fig:core-example}.) 
+Then, a path in $\mathcal{S}_k(G)$ connecting two nodes is called a \emph{reconfiguration sequence} between them, and the \emph{length} of the reconfiguration sequence is defined to be the number of edges in the path. 
+The \emph{distance} between two nodes in $\mathcal{S}_k(G)$ is the length of a shortest reconfiguration sequence between them;
+or it is $+\infty$ if no such sequence exists. 
 
-In this paper, we study two variants of ISRP under TJ, which probe the structure
-of the solution space in complementary ways.
-The \emph{solution space} of an ISR instance $(G, I_\ini, I_\tar)$ is the graph whose nodes are the
+Given a graph $G$ and two independent sets $I_{\ini}$ and $I_{\tar}$ of $G$ such that $|I_{\ini}|=|I_{\tar}| = k$, the \emph{Independent Set Reconfiguration} (\ISR) problem under the \emph{Token Jumping} (TJ) rule is to determine whether there exists a reconfiguration sequence between $I_{\ini}$ and $I_{\tar}$ in $\mathcal{S}_k(G)$.
+Note that \ISR is a decision problem, and hence we are not asked for an actual reconfiguration sequence as an output. 
+This problem is known to be \PSPACE-complete~\cite{kamemi12}, even when restricted to graphs of bounded pathwidth~\cite{Wrochna18}.
+The \PSPACE-completeness implies that there are yes-instances such that even a
+shortest reconfiguration sequence has super-polynomial length, unless $\PSPACE = \NP$.
+
+In this paper, we study two variants of \ISR under \TJrule which probe the structure of the solution space in complementary ways.
+
+\paragraph{Shortest variant} 
+Given an \ISR instance $(G, I_\ini, I_\tar)$, the \emph{shortest variant} aims to
+determine the existence of a reconfiguration sequence between $I_\ini$ and
+$I_\tar$ and, if so, to compute the distance between them. 
+This variant generalizes \ISR, and is the classical
+reachability/shortest-path question between two prescribed independent sets in the solution space.
+This variant has been studied extensively from a theoretical viewpoint, and was adopted as a metric of the CoRe Challenge~\cite{sotaokit24}.
+
+\paragraph{Farthest variant}
+Given only one independent set $I_\ini$ of size $k$, the \emph{farthest variant}~\cite{ItoKNSSTT23} aims to find an
+independent set whose distance from $I_\ini$ is maximum among all
+independent sets in the same connected component of $\mathcal{S}_k(G)$ containing $I_\ini$, together with that distance. Rather than connecting
+two prescribed independent sets, this variant asks how far the reconfiguration
+relation can carry $I_\ini$ throughout its connected component of the solution
+space. 
+
+\begin{comment}
+
+The two variants probe the structure of the solution space in complementary ways.
+The shortest variant is a question between two prescribed endpoints, whereas the farthest variant is a question from a single endpoint to its whole connected component. 
+Studying both lets us observe how the width of the decomposition affects a ZDD-based solver on two qualitatively different uses of the same solution-space representation.
+
+
+We imagine that a \emph{token} is placed on each vertex of a subset, so that token placements and vertex subsets are in one-to-one correspondence; then, moving a token corresponds to changing one subset into another. 
+In this paper, a token placement is \emph{feasible} when its corresponding vertex subset is an independent set. 
+Two independent sets $I$ and $I'$ of $G$ are \emph{adjacent} under the \emph{Token
+Jumping} (TJ) rule if $I'$ is obtained from $I$ by moving a single token from its
+vertex to another vertex not in $I$, and vice versa.
+For two independent sets $I$ and $I'$ of $G$ such that
+$|I|=|I'|$, a \emph{reconfiguration sequence} between $I$ and
+$I'$ is a sequence $\langle I_0, I_1, \ldots, I_\ell \rangle$ such that:
+\begin{listing}{-}
+\item[-] $I_0 = I$ and $I_\ell = I'$;
+\item[-] $I_i$ is an independent set of $G$ such that $|I_i| = |I| = |I'|$, for each $i$, $0 \leq i \leq \ell$;
+\item[-] $I_i$ and $I_{i+1}$ are adjacent under \TJrule for each $i$, $0 \le i \le \ell-1$.
+\end{listing}
+Given two independent sets $I_\ini$ and $I_\tar$ of $G$ such that
+$|I_\ini|=|I_\tar|$, the \emph{Independent Set Reconfiguration} (\ISR) Problem under \TJrule is to
+determine whether there exists a reconfiguration sequence between $I_\ini$ and
+$I_\tar$. 
+
+The \emph{solution space} of an \ISR instance $(G, I_\ini, I_\tar)$ is the graph whose nodes are the
 independent sets of $G$ of size $|I_\ini|$ and in which two independent sets are
-joined whenever they are adjacent under TJ; a reconfiguration sequence is exactly
+joined whenever they are adjacent under \TJrule; a reconfiguration sequence is exactly
 a path in this graph. The \emph{distance} between two independent sets in the
 solution space is the length of a shortest reconfiguration sequence between them;
 or it is $\infty$ if no such sequence exists. The solution space can be exponentially
 large in $|V|$, which makes designing practically efficient solvers a challenging
 task.
+\end{comment}
 
-The first is the \emph{shortest variant}, which generalizes ISRP.
-Given an ISRP instance $(G, I_\ini, I_\tar)$, the shortest variant aims to
-determine the existence of a reconfiguration sequence between $I_\ini$ and
-$I_\tar$ and, if so, to compute the distance between them. This is the classical
-reachability/shortest-path question between two prescribed independent sets in the solution space,
-which has been studied extensively from a theoretical standpoint and was adopted
-as a metric of the CoRe Challenge~\cite{sotaokit24}.
 
-The second is the \emph{farthest variant}~\cite{ItoKNSSTT23}.
-Given only one independent set $I_\ini$, the farthest variant aims to find an
-independent set whose distance from $I_\ini$ is maximum among all independent
-sets reachable from $I_\ini$, together with that distance. Rather than connecting
-two prescribed independent sets, this variant asks how far the reconfiguration
-relation can carry $I_\ini$ throughout its connected component of the solution
-space. It is therefore a one-to-many question about the extent of a connected
-component, in contrast to the one-to-one, path-between-two-endpoints nature of
-the shortest variant. Studying both lets us observe how the width of the decomposition affects a
-ZDD-based solver on two qualitatively different uses of the same solution-space
-representation.
 
 \subsection{Overview of ZDD-Based Solvers}
 \label{subsec:zdd_solver}
 
-A \emph{zero-suppressed binary decision diagram} (ZDD) is a directed acyclic
-graph that compactly represents a family of sets over a fixed universal set
-$U = \{x_1, \dots, x_n\}$ equipped with a total order $x_1 < \cdots < x_n$.
+A \emph{zero-suppressed binary decision diagram} (ZDD)~\cite{Minato1993} is a directed acyclic
+graph that compactly represents a family of sets over a fixed universe
+$U = \{x_1, \dots, x_n\}$ equipped with a total order $x_1 < \cdots < x_n$ on $U$.
 It has two terminal nodes $\bot$ and $\top$, representing the empty family
 $\emptyset$ and the family $\{\emptyset\}$, respectively, and each non-terminal
 node is labeled with an element of $U$ and has a $0$-arc and a $1$-arc.
 By sharing isomorphic subgraphs and suppressing redundant nodes, a ZDD can
-represent a family whose cardinality is exponential in $n$ using far fewer
+represent a subset family of $U$ whose cardinality is exponential in $n$ using far fewer
 nodes, and it supports efficient family operations such as union,
 intersection, and difference through recursive procedures over its shared
 structure~\cite{Minato1993,knuth:taocp41}.
 
-For ISRP, the relevant family is the set of all independent sets of the input
-graph $G = (V, E)$, where the universal set is taken to be the vertex set $V$.
+For \ISR, the relevant family is the set of all independent sets of the input
+graph $G = (V, E)$, where the universe is taken to be the vertex set $V$.
 The state-of-the-art ZDD-based solver \textsc{ddreconf}~\cite{ItoKNSSTT23} solves
-ISRP under the TJ rule in two phases.
+\ISR under the \TJrule rule in two phases.
 
 In the first phase, the solver constructs the \emph{solution-space ZDD}.
 It first builds a ZDD $\zind$ representing the family of all independent sets of
-$G$~\cite{Hayase1995}. Recall that, under the TJ rule, every independent set in a
+$G$~\cite{Hayase1995}. Recall that, under the \TJrule rule, every independent set in a
 reconfiguration sequence has the same cardinality $k = |I_\ini|$ as the start
 independent set $I_\ini$. The solver therefore builds a ZDD $\Z_{=k}$
 representing all vertex subsets of cardinality exactly $k$~\cite{knuth:taocp41},
 and obtains the solution space as $\zsol = \zind \cap \Z_{=k}$, which represents
-every independent set of $G$ of cardinality $k$. The family $\sets(\zsol)$ is
+the family of all independent sets of $G$ of cardinality $k$. The family $\sets(\zsol)$ is
 exactly the node set of the solution space defined in
 Section~\ref{subsec:isr}.
 
@@ -416,41 +461,43 @@ $\sets(\Z^{0}) = \{I_\ini\}$, it iteratively computes
   \Z^{i} \;\gets\; \mathsf{op}(\Z^{i-1}) \cap \zsol,
   \label{eq:transition}
 \end{equation}
-where $\mathsf{op}$ applies the TJ rule to every independent set encoded by
+where $\mathsf{op}$ applies the \TJrule rule to every independent set encoded by
 $\Z^{i-1}$. Concretely, $\mathsf{op}(\Z) = \swap(\Z, V, V)$, where
 $\swap(\Z, A, R)$ represents the family
 \[
   \{\, I \cup \{v\} \setminus \{v'\} \mid I \in \sets(\Z),\,
   v \in A \setminus I,\, v' \in I \cap R \,\}
 \]
-obtained by moving a single token, and intersecting with $\zsol$ retains only
+obtained by swapping a single token $v' \in I \cap R$ with $v \in A \setminus I$, and intersecting with $\zsol$ retains only
 those sets that are independent sets of cardinality $k$. Hence $\Z^{i}$
 represents exactly the family of independent sets whose distance from $I_\ini$ is
-$i$, and iterating \eqref{eq:transition} amounts to a breadth-first search over
-the solution space. This implicit search lets \textsc{ddreconf} explore an
+equal to $i$, and iterating \eqref{eq:transition} amounts to a breadth-first search over
+the solution space. This implicit search strategy allows us to explore an
 exponentially large solution space, since each $\Z^{i}$ may encode an enormous
 number of independent sets within a small ZDD.
 
 Both variants are answered from this sequence of ZDDs. For the shortest variant,
-the solver checks $\Z^{i}$ after each step: once $I_\tar \in \sets(\Z^{i})$, the
-distance between $I_\ini$ and $I_\tar$ is $i$, and once $\Z^{i} = \bot$ without
-having reached $I_\tar$, no reconfiguration sequence exists. For the farthest
-variant, the solver continues until $\Z^{h+1} = \bot$; the last nonempty
+the solver checks $\Z^{i}$ after each step: once we have $I_\tar \in \sets(\Z^{i})$, the
+distance between $I_\ini$ and $I_\tar$ is equal to $i$, and once we have $\Z^{i} = \bot$ without
+having reached~$I_\tar$, no reconfiguration sequence exists between $I_\ini$ and $I_\tar$.
+For the farthest variant, the solver continues until $\Z^{h+1} = \bot$; the last nonempty
 $\Z^{h}$ then contains the independent sets farthest from $I_\ini$, and $h$ is
 their distance.
 
 The performance of this workflow is governed by the \emph{size} (number of
 nodes) of the ZDDs that appear in it, which in turn depends critically on the
-order in which the edges of $G$ are processed during ZDD construction. For the
+order in which the edges of $G$ are processed during the ZDD construction. For the
 first phase, this dependence is well understood~\cite{inoue16}: the working state
 maintained during top-down ZDD construction, and hence both the construction
-time and the resulting ZDD size, grows rapidly with the width of the path
+time and the resulting ZDD size, grow rapidly with the width of the path
 decomposition induced by the processing order (we make this correspondence
 precise in Section~\ref{subsec:pathdecomp}). A processing order of small width
-therefore keeps $\zind$, and hence $\zsol$, compact; for example, the family of
-independent sets of an $8 \times 250$ grid graph has cardinality
-$3.07 \times 10^{361}$, yet it can be represented by a ZDD with only $49{,}989$
-nodes under a suitable order~\cite{ItoKNSSTT23}. Crucially, \textsc{ddreconf}
+therefore keeps $\zind$, and hence $\zsol$, compact.
+%; for example, the family of
+%independent sets of an $8 \times 250$ grid graph has cardinality
+%$3.07 \times 10^{361}$, yet it can be represented by a ZDD with only $49{,}989$
+%nodes under a suitable order~\cite{ItoKNSSTT23}.
+Crucially, \textsc{ddreconf}
 fixes a single processing order before construction and reuses it throughout
 both phases, so this order influences not only the construction of $\zsol$ but
 also the entire subsequent transition computation. While the benefit of a
@@ -466,9 +513,9 @@ Our approach is built on a simple observation made in
 Section~\ref{subsec:zdd_solver}: the performance of \textsc{ddreconf} is governed
 by the sizes of the ZDDs that appear throughout its two phases, and these sizes
 are determined by the order in which the edges of the input graph $G$ are
-processed during ZDD construction. We already know that, for the first phase, a
-processing order of small width keeps the constructed ZDD small; what is not
-clear is whether this benefit carries over to the solver as a whole, once the
+processed during ZDD construction. While, for the first phase, a
+processing order of small width keeps the constructed ZDD small~\cite{inoue16}, it is not
+immediate whether this benefit carries over to the solver as a whole, once the
 cost of the subsequent transition computation and the cost of obtaining the
 order itself are taken into account. The original \textsc{ddreconf} fixes the
 order according to the input itself and never revisits it. We instead treat the
@@ -497,8 +544,8 @@ $\max_{1 \le i \le \ell} |X_i| - 1$, and the \emph{pathwidth} $\mathrm{pw}(G)$ o
 $G$ is the minimum width over all its path decompositions.
 
 The CoRe Challenge provides each instance as an input graph in the DIMACS
-format~\cite{sotaokit24}: a \texttt{p} line declares the numbers of vertices and
-edges, and each subsequent \texttt{e} line lists the two endpoints of an edge.
+format~\cite{sotaokit24}: a line starting with \texttt{p} declares the numbers of vertices and
+edges, and each subsequent line starting with \texttt{e} lists the two endpoints of an edge.
 When \textsc{ddreconf} reads such a file and constructs $\zind$ in the first
 phase, it processes the edges one by one, in the order in which they appear in
 the file. The cost of this top-down construction is governed by the
@@ -526,7 +573,7 @@ decomposition of small width, and measure how the overall performance of
 \subsection{Heuristic and Optimal Path Decomposition}
 \label{subsec:algorithms}
 
-Computing $\mathrm{pw}(G)$ exactly is NP-hard, so obtaining a minimum-width path
+Since computing $\mathrm{pw}(G)$ exactly is \NP-hard~\cite{ACP97}, obtaining a minimum-width path
 decomposition is expensive in general. Besides the decomposition induced by the
 input order (\OrigDecom), we obtain a path decomposition using the algorithm of
 Kobayashi, Komuro, and Tamaki~\cite{KobayashiKomuroTamaki2014}. This algorithm
@@ -537,7 +584,7 @@ optimal one. We exploit both ends of this process, yielding two path
 decompositions of different quality and cost. This algorithm is an existing
 method, which we use as is and do not claim as a contribution of this paper.
 
-\paragraph{Heuristic decomposition (\HeurDecom).}
+\paragraph{Heuristic decomposition (\HeurDecom)}
 As a fast preprocessing step, we take the first decomposition that the algorithm
 produces, whose width is small but not necessarily minimum. Obtaining it is
 quick enough to serve as a lightweight preprocessor even on the larger CoRe
@@ -549,7 +596,7 @@ only when the first decomposition is strictly wider than the original do we fall
 back to the original order. Thus \HeurDecom never yields a wider decomposition
 than \OrigDecom.
 
-\paragraph{Optimal decomposition (\OptDecom).}
+\paragraph{Optimal decomposition (\OptDecom)}
 To examine the effect of attaining the true minimum width, we run the same
 algorithm to completion, obtaining an optimal path decomposition, i.e., one of
 width exactly $\mathrm{pw}(G)$. This is far more time-consuming than obtaining the
@@ -598,213 +645,326 @@ provides.
 \subsection{Experimental Setup}
 \label{subsec:setup}
 
-We implemented the path-decomposition preprocessing on top of
-\textsc{ddreconf}~\cite{ItoKNSSTT23} and evaluated the three decompositions
-\OrigDecom, \HeurDecom, and \OptDecom defined in Section~\ref{sec:approach}.
+On top of \textsc{ddreconf}~\cite{ItoKNSSTT23} we implemented the
+path-decomposition preprocessing and compared the three decompositions
+\OrigDecom, \HeurDecom, and \OptDecom of Section~\ref{sec:approach}.
 %% TODO: machine spec (CPU, RAM), compiler, ZDD libraries and versions,
 %% ddreconf version/commit, and the implementation used for the pathwidth
 %% computation of Kobayashi--Komuro--Tamaki.
-All experiments were run on \todo{machine and software environment}.
+All experiments were run on a Linux OS with a 2.3 GHz Intel Xeon Gold processor and 2TB memory.
 
-\paragraph{Benchmarks.}
-We used the benchmark instances of the CoRe Challenge 2022 and
-2023~\cite{sotaokit24}. In total there are $693$ instances arising from $519$
-distinct input graphs; each graph may appear in several instances that differ in
-the start and goal independent sets.
-%% TODO: how instances were selected (all? a subset?), and how many of the 519
-%% graphs are too large to be read by ddreconf at all (handoff item 9). Under
-%% \HeurDecom, ddreconf rejects 73 instances outright; clarify this in the
-%% population description.
-The graphs range widely in size, from tens of vertices to graphs with more than
-$10^{6}$ edges \todo{confirm size range and selection criteria}.
+\paragraph{Benchmarks}
+Our instances come from the CoRe Challenge 2022 and 2023~\cite{sotaokit24}:
+$693$ instances in all, drawn from $519$ distinct input graphs, where a single
+graph may give rise to several instances that differ only in their start and goal
+independent sets. The graphs vary widely in size, as shown in
+\figurename~\ref{fig:graphs226}, which plots all $519$ graphs by their numbers of
+vertices and edges.
 
-\paragraph{Time limits.}
-We adopt a two-stage time budget that separates preprocessing from solving.
-Computing \OptDecom requires solving an NP-hard pathwidth problem, so we allow up
-to one hour for this computation; if it does not finish within the limit, no
-optimal decomposition is available for that instance and \OptDecom is undefined.
-Computing \HeurDecom and reading the input order for \OrigDecom incur negligible
-preprocessing cost.
-Given the (possibly reordered) input, we then run the unmodified
-\textsc{ddreconf} with a time limit of $30$ minutes of wall-clock time per
-instance. An instance is counted as \emph{solved} under a given decomposition if
-\textsc{ddreconf} terminates with the correct answer within this $30$-minute
-limit.
-We report results for both the shortest and the farthest variant.
+\paragraph{Time limits}
+We budget preprocessing and solving separately. \OrigDecom uses the input order
+as given and requires no preprocessing, whereas \HeurDecom and \OptDecom are each
+computed under a one-hour preprocessing budget. \OptDecom whose preprocessing does
+not finish within the hour is left undefined for that instance. 
+If the heuristic does not finish in time, we set the width of \HeurDecom to $+\infty$; 
+the fallback rule then applies to this case, and \HeurDecom coincides with \OrigDecom.
+We then pass the (possibly reordered) input to the unmodified
+\textsc{ddreconf} and allow it $30$ minutes of wall-clock time per instance; an
+instance counts as \emph{solved} under a decomposition if \textsc{ddreconf}
+returns the correct answer within that limit. 
+%Throughout, we report both the shortest and the farthest variants.
 
-Of the $519$ graphs, the optimal pathwidth (and hence \OptDecom) was computed
-within the one-hour limit for $226$ graphs, corresponding to $279$ of the $693$
-instances; for the remaining $293$ graphs ($414$ instances) the optimal decomposition
-could not be obtained.
-This split is itself informative: the instances for which \OptDecom is available
-are markedly smaller (median $120$ vertices and $476$ edges) than those for which
-it is not (median $450$ vertices and $1560$ edges). We therefore present two
-kinds of comparison: one restricted to the instances on which all three decompositions
-are available, and one over all instances that contrasts \OrigDecom with
-\HeurDecom.
 
-\subsection{Width of the Three Decompositions}
+\subsection{Input Graphs and Widths of the Three Decompositions}
 \label{subsec:pw-three}
+Before measuring solver performance, we first observe that the one-hour
+preprocessing budget already divides the benchmark in a telling way. \OptDecom
+was obtained in time for $226$ of the $519$ graphs, corresponding to $279$ of the
+$693$ instances. For the other $293$ graphs ($414$ instances), the pathwidth
+$\mathrm{pw}(G)$ could not be computed in time; recall that computing
+$\mathrm{pw}(G)$ is \NP-hard~\cite{ACP97}. Figure~\ref{fig:graphs226} plots all
+$519$ graphs by their numbers of vertices and edges, with the $226$ graphs for
+which $\mathrm{pw}(G)$ is available colored by their pathwidth.
+Table~\ref{tab:graphs226} summarizes the sizes of the \OptDecom-available graphs
+and instances, grouped into vertex-count bands. The table shows that graphs in
+the same size band can differ widely in pathwidth, and that the median pathwidth
+stays small even as the number of vertices grows: graph size and pathwidth are
+largely decoupled.
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.8\linewidth]{graph_scale_overview.revised.pdf}
+  \caption{The $519$ input graphs by number of vertices and edges. The $226$
+  graphs for which \OptDecom was computed within the hour are colored by their
+  pathwidth $\mathrm{pw}(G)$.}
+  \label{fig:graphs226}
+\end{figure}
 
-Before turning to solver performance, we examine how much the three decompositions differ
-in width on the input graphs themselves, independently of whether the instances
-are solved.
-Figure~\ref{fig:pw-three} shows, for each of the $226$ graphs whose optimal
-pathwidth was computed within the one-hour limit, the width of \OrigDecom,
-\HeurDecom, and \OptDecom, with the three values for the same graph connected by
-a vertical line.
-Two observations stand out.
-First, reordering the edges by a path decomposition reduces the width
-dramatically: the median width drops from $32$ for \OrigDecom to $11$ for
-\HeurDecom and $10$ for \OptDecom (the last value is the pathwidth
-$\mathrm{pw}(G)$).
-Second, \HeurDecom is already very close to \OptDecom; the two markers nearly
-coincide for most graphs, and the median per-graph ratio of their widths is
-$1.00$.
-In other words, on this benchmark the heuristic decomposition attains
-essentially the same width as the optimal one, while costing far less to compute
-(Section~\ref{subsec:solved}).
-Many graphs whose width is on the order of $100$ under the input order collapse
-to a narrow band of width around $10$ to $17$ once decomposed, even when the
-graph is large.
+In contrast, \HeurDecom is fast to compute: it finishes within a few seconds on
+almost every graph, and exceeds the one-hour budget on only a single graph,
+\textsf{queen200x200}, the largest in the benchmark with $40{,}000$ vertices and
+$13{,}253{,}400$ edges. On a small number of graphs, the heuristic order is in
+fact no better than the input order: for $8$ of the $519$ graphs, the width of the
+heuristic order exceeds that of \OrigDecom; in these cases, the fallback rule replaces it with \OrigDecom.
+These $8$ graphs correspond to $18$ instances and include \textsf{queen200x200}.
+\OptDecom is available for $3$ of these $8$ graphs, corresponding to $6$ instances.
+
+
+\begin{table}[t]
+  \centering
+  \caption{The $226$ graphs for which \OptDecom was computed, grouped by number of
+  vertices: the number of graphs and instances, the range of edges, and the range
+  and median of pathwidth in each size band.}
+  \label{tab:graphs226}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lrrrrr}
+    \hline
+    $|V|$ & \#graphs & \#inst. & $|E|$ & $\mathrm{pw}(G)$ & med.\ $\mathrm{pw}$ \\
+    \hline
+    $\le 50$      & $40$ & $52$ & $5$--$476$            & $1$--$35$  & $8$  \\
+    $51$--$100$   & $51$ & $77$ & $78$--$1{,}470$       & $4$--$72$  & $13$ \\
+    $101$--$200$  & $50$ & $59$ & $144$--$6{,}961$      & $4$--$119$ & $10$ \\
+    $201$--$500$  & $65$ & $69$ & $300$--$121{,}275$    & $4$--$492$ & $10$ \\
+    $501$--$1000$ & $20$ & $22$ & $1{,}835$--$449{,}449$ & $11$--$990$ & $17$ \\
+    \hline
+    total         & $226$ & $279$ & $5$--$449{,}449$   & $1$--$990$ & $10$ \\
+    \hline
+  \end{tabular}
+\end{table}
+
+We then ask how far apart the three decompositions are in width on the input
+graphs themselves, regardless of whether their instances are solved.
+Figure~\ref{fig:pw-three} shows the widths of \OrigDecom, \HeurDecom, and
+\OptDecom for each of the $226$ \OptDecom-available graphs, joining the three
+values for a graph by a vertical line. Note that the \HeurDecom widths in the
+figure are those of the raw heuristic order, before the fallback to \OrigDecom
+described above; consequently, for $3$ of the $226$ graphs, the \HeurDecom marker
+sits slightly above the corresponding \OrigDecom marker, although in the solving
+experiments these graphs revert to \OrigDecom.
+
+Two points stand out. First, reordering the edges along a path decomposition
+shrinks the width dramatically: the median width drops from $32$ for \OrigDecom to
+$11$ for \HeurDecom and $10$ for \OptDecom (that is, $\mathrm{pw}(G)$). 
+The effect is most striking in the right-hand region of \figurename~\ref{fig:pw-three}: 
+many graphs whose \OrigDecom width is in the hundreds collapse into a narrow band of roughly $10$
+to $20$ once decomposed.
+Second, \HeurDecom is already almost indistinguishable from \OptDecom: their markers
+nearly overlap for most graphs, and for $166$ of the $226$ graphs the two widths
+coincide exactly. 
+
+As a result, we would prefer \HeurDecom to \OptDecom in
+practice: for the $226$ \OptDecom-available graphs, the heuristic reaches essentially
+the optimal width at a fraction of the cost. 
+In particular, computing \HeurDecom is negligible for these graphs: it
+takes a median of $1.9$ seconds and never more than $12.7$ seconds. 
+However, computing \OptDecom is another matter; its median is comparable ($2.4$ seconds), but it can take up to
+$1{,}541$ seconds (about $26$ minutes). More tellingly, \OptDecom cannot be computed within an hour for $293$ graphs ($414$
+instances), and hence \OptDecom never reaches the solver on those instances.
+
 
 \begin{figure}[t]
   \centering
   %% TODO: final vector figure; recolor to avoid clashing with the
   %% solved/unsolved colors used in Fig.~\ref{fig:pw-solvability}.
-  \includegraphics[width=\linewidth]{pw_three_orders.pdf}
-  \caption{Width of \OrigDecom, \HeurDecom, and \OptDecom for each input
-  graph (the $226$ graphs whose optimal pathwidth was computed within one hour).
-  The three values for the same graph are joined by a vertical line.
-  \HeurDecom (square) and \OptDecom (triangle) almost coincide, well below
-  \OrigDecom (circle).}
+  \includegraphics[width=0.8\linewidth]{pw_three_orders.revised.pdf}
+  \caption{Width of \OrigDecom (circle), \HeurDecom (square), and \OptDecom
+  (triangle) for each of the $226$ \OptDecom-available graphs. The three values
+  for the same graph are joined by a vertical line. The \HeurDecom widths are
+  those of the raw heuristic order, before the fallback to \OrigDecom.}
   \label{fig:pw-three}
 \end{figure}
 
 
-\subsection{Solved Instances and Running Time}
-\label{subsec:solved}
-
-We now turn to the bottom-line question of how many instances each decomposition lets
-\textsc{ddreconf} solve within the $30$-minute limit.
-Table~\ref{tab:solved} reports the counts for both variants, under the two
-comparisons motivated in Section~\ref{subsec:setup}.
-
 \begin{table}[t]
   \centering
-  \caption{Number of instances solved within $30$ minutes. The left block is
-  restricted to the $279$ instances for which all three decompositions are available; the
-  right block is over all $693$ instances, where \OptDecom is available for only
-  $279$ of them.}
+  \caption{Number of instances solved within $30$ minutes, restricted to the
+  $279$ instances for \OptDecom-available graphs.}
   \label{tab:solved}
-  \begin{tabular}{lrrr|rr}
+  \begin{tabular}{l|rrr}
     \hline
-    & \multicolumn{3}{c|}{opt-available ($279$)} & \multicolumn{2}{c}{all ($693$)} \\
-    variant & \OrigDecom & \HeurDecom & \OptDecom & \OrigDecom & \HeurDecom \\
+    variant & \OrigDecom & \HeurDecom & \OptDecom \\
     \hline
-    shortest & $210$ & $216$ & $218$ & $210$ & $231$ \\
-    farthest & $208$ & $215$ & $218$ & $208$ & $229$ \\
+    shortest & $210$ & $216$ & $218$ \\
+    farthest & $208$ & $215$ & $218$ \\
     \hline
   \end{tabular}
 \end{table}
 
-On the instances where all three decompositions are available, both \HeurDecom and
-\OptDecom solve more than \OrigDecom, and \HeurDecom is nearly on par with
-\OptDecom (for the shortest variant, $216$ versus $218$; for the farthest
-variant, $215$ versus $218$).
-Over all instances, \HeurDecom solves the most: $231$ versus $210$ for
-\OrigDecom on the shortest variant, and $229$ versus $208$ on the farthest
-variant.
 
-The reason \HeurDecom is preferable to \OptDecom in practice lies in
-preprocessing cost.
-On the instances where \OptDecom is available, computing \HeurDecom takes a
-median of $2.1$ seconds (at most $13.7$ seconds), whereas computing \OptDecom
-takes a median of $3.2$ seconds but a mean of $64.7$ seconds and up to
-$2348$ seconds.
-More importantly, for $414$ of the $693$ instances the optimal pathwidth could
-not be computed within one hour at all, so \OptDecom never reaches the solver on
-these instances.
-These are exactly the large, hard instances (median $450$ vertices and $1560$
-edges).
-On these instances, \HeurDecom lets \textsc{ddreconf} solve $15$ instances on the
-shortest variant and $14$ on the farthest variant that it would otherwise not
-reach.
-To confirm that this is a genuine effect of the heuristic decomposition rather than of
-the instances merely being easy, we ran \OrigDecom on these heuristic-solved
-instances as well.
-%% TODO: report the final count once the in-progress \OrigDecom runs on the
-%% 15 (shortest) / 14 (farthest) heur-solved large instances complete. Several
-%% are already confirmed to exceed the 30-minute limit under \OrigDecom while
-%% \HeurDecom solves them in seconds (e.g.\ width drops $234\to23$ and
-%% $140\to17$); a few have unchanged width under reordering and must be
-%% reported separately or excluded (handoff: groups A/D vs C).
-\OrigDecom fails to solve \todo{N} of them within the $30$-minute limit, whereas
-\HeurDecom solves them in seconds.
-Thus, on the large instances where an optimal decomposition is out of reach, the
-lightweight heuristic decomposition is the one that lets the solver make
-progress.
-
-Because the solution-space ZDD construction is shared by both variants, the two
-variants differ only in the second phase, where the farthest variant explores the
-solution space until it is exhausted.
-This makes the farthest variant somewhat more expensive in the second phase, and
-correspondingly a few fewer instances are solved under it; otherwise the two
-variants exhibit the same trends.
-
-\subsection{Decomposition Width Determines Solvability}
-\label{subsec:solvability}
-
-Finally, we examine which property of an instance governs whether it can be
-solved.
-Figure~\ref{fig:pw-solvability} plots every instance by its number of edges and
-the width of the decomposition used, marking whether \textsc{ddreconf} solves it
-within $30$ minutes, for \OrigDecom (top) and \HeurDecom (bottom).
-In both panels, solved and unsolved instances separate along an almost horizontal
-boundary: solvability is governed by this width rather than by graph size.
-Large graphs are solved when this width is small and left unsolved when it
-is large; among instances with more than the median number of edges, those solved
-under \HeurDecom have a median width of $17$, while those left unsolved have a
-median width of $156$.
-Comparing the two panels shows the effect of preprocessing: \HeurDecom pulls the
-same graphs downward into the low-width, solvable region, turning many
-instances that are unsolved under \OrigDecom into solved ones.
-Quantitatively, on a logarithmic scale matching the axes of the figure, the
-point-biserial correlation between solvability and width is stronger than
-that between solvability and the number of edges ($-0.64$ versus $-0.53$ for
-\HeurDecom), confirming that width is the better predictor.
-
-\begin{figure}[t]
+\begin{table*}[t]
   \centering
-  %% TODO: final vector figure; the farthest variant shows the same trend and is
-  %% omitted to save space (state this if a reviewer asks).
-  \includegraphics[width=\linewidth]{pw_solvability.pdf}
-  \caption{Each instance plotted by number of edges and the width of its
-  decomposition, for \OrigDecom (top) and \HeurDecom (bottom), on the shortest variant.
-  Solved instances (within $30$ minutes) lie below an almost horizontal boundary,
-  showing that width, not size, governs solvability. \HeurDecom shifts
-  instances downward, enlarging the solvable region.}
-  \label{fig:pw-solvability}
-\end{figure}
+  \caption{Graphs that \OrigDecom cannot solve within $30$ minutes but a narrower
+  decomposition can, with identical behavior on both variants. For each graph, we
+  give its size, the width under the three decompositions, the number of flipped instances, and the decompositions other than \OrigDecom
+  that solve it. A dash in the \OptDecom column means \OptDecom was not computed
+  within the hour; for those graphs the comparison is against \HeurDecom only. The
+  top block lists \OptDecom-available graphs, the bottom block \OptDecom-unavailable
+  ones.}
+  \label{tab:flips-common}
+  \footnotesize
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{l|rr|rrr|cl}
+    \hline
+    graph name & $|V|$ & $|E|$ & \OrigDecom & \HeurDecom & \OptDecom & \#flip & solved by \\
+    \hline
+    \textsf{games120}                    & $120$ & $638$  & $91$  & $46$ & $32$ & $2$ & \OptDecom \\
+    \textsf{queen8\_12}                  & $96$  & $1368$ & $85$  & $68$ & $65$ & $2$ & \HeurDecom, \OptDecom \\
+    \textsf{random\_instance006\_graph003} & $78$  & $234$  & $49$  & $27$ & $23$ & $1$ & \HeurDecom, \OptDecom \\
+    \textsf{mug88\_25}                   & $88$  & $146$  & $32$  & $10$ & $5$  & $1$ & \HeurDecom, \OptDecom \\
+    \textsf{mug100\_1}                   & $100$ & $166$  & $26$  & $16$ & $5$  & $1$ & \HeurDecom, \OptDecom \\
+    \hline
+    \textsf{SAT\_exp\_instance018}       & $270$ & $477$  & $234$ & $23$ & ---  & $1$ & \HeurDecom \\
+    \textsf{SAT\_exp\_instance016}       & $216$ & $376$  & $184$ & $20$ & ---  & $1$ & \HeurDecom \\
+    \textsf{SAT\_exp\_instance014}       & $168$ & $287$  & $140$ & $17$ & ---  & $1$ & \HeurDecom \\
+    \textsf{anna}                        & $138$ & $493$  & $61$  & $21$ & ---  & $2$ & \HeurDecom \\
+    \textsf{random\_instance007\_graph003} & $91$  & $273$  & $54$  & $31$ & ---  & $1$ & \HeurDecom \\
+    \textsf{random\_instance007\_graph005} & $91$  & $273$  & $53$  & $30$ & ---  & $1$ & \HeurDecom \\
+    \textsf{random\_instance006\_graph005} & $78$  & $234$  & $51$  & $26$ & ---  & $1$ & \HeurDecom \\
+    \textsf{ph-05-04}                    & $165$ & $256$  & $43$  & $17$ & ---  & $1$ & \HeurDecom \\
+    \hline
+  \end{tabular}
+\end{table*}
+
+\begin{comment}
+\begin{table*}[t]
+  \centering
+  \caption{Graphs whose flip behavior differs between the two variants. Each
+  variant column lists all decompositions that solve the graph within $30$ minutes
+  (including \OrigDecom when it succeeds) and, in parentheses, the number of
+  flipped instances; a dash means no decomposition solves it for that variant.
+  The top block
+  lists \OptDecom-available graphs, the bottom block \OptDecom-unavailable ones.}
+  \label{tab:flips-diff}
+  \footnotesize
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{l|rr|rrr|ll}
+    \hline
+    graph & $|V|$ & $|E|$ & \OrigDecom & \HeurDecom & \OptDecom & shortest solved by & farthest solved by \\
+    \hline
+    \textsf{miles500}                    & $128$ & $1170$ & $104$ & $30$ & $22$ & \OrigDecom, \HeurDecom, \OptDecom & \HeurDecom, \OptDecom ($1$) \\
+    \textsf{random\_instance005\_graph004} & $65$  & $195$  & $38$  & $24$ & $20$ & \OrigDecom, \HeurDecom, \OptDecom & \HeurDecom, \OptDecom ($1$) \\
+    \textsf{mug100\_25}                  & $100$ & $166$  & $32$  & $17$ & $6$  & \HeurDecom, \OptDecom ($1$) & \OptDecom ($1$) \\
+    \hline
+    \textsf{random\_instance007\_graph001} & $91$  & $273$  & $56$  & $30$ & ---  & \HeurDecom ($1$) & --- \\
+    \hline
+  \end{tabular}
+\end{table*}    
+\end{comment}
+
+
+
+\subsection{Solved Instances}
+\label{subsec:solved}
+
+We now reach the bottom line: how many instances each decomposition lets
+\textsc{ddreconf} solve within $30$ minutes.
+We note that, although the $30$-minute solving budget is separate from the
+one-hour preprocessing budget, preprocessing and solving together finish within
+$30$ minutes for every instance counted as solved in this subsection. Therefore, the
+comparison among the three decompositions is fair, even to \OrigDecom, which needs
+no preprocessing.
+
+\paragraph{\OptDecom-available instances}
+Table~\ref{tab:solved} gives the counts for both variants on the $279$ instances
+where all three decompositions are available. On these instances, both \HeurDecom
+and \OptDecom solve more than \OrigDecom, and \HeurDecom trails \OptDecom by at
+most a few instances. Moreover, the three solved sets are perfectly nested: every
+instance solved under \OrigDecom is also solved under \HeurDecom, and every
+instance solved under \HeurDecom is also solved under \OptDecom.
+
+\paragraph{\OptDecom-unavailable instances}
+On the remaining $414$ instances, for which \OptDecom is \emph{not} available, we
+run \textsc{ddreconf} under \HeurDecom; it solves $15$ of them on the shortest
+variant and $14$ on the farthest. We also run \textsc{ddreconf} under \OrigDecom on
+these $15$ (resp.\ $14$) solved instances; it solves only $5$ of them, the same ones on both variants. In summary, $10$ instances on the shortest variant
+and $9$ on the farthest are solved only under \HeurDecom and not under \OrigDecom.
+
+\paragraph{Width for the flipped instances}
+We call an instance \emph{flipped} when \OrigDecom cannot solve it within $30$
+minutes but \HeurDecom or \OptDecom can, and we now look at the width of their
+decompositions. Table~\ref{tab:flips-common} lists the graphs that have at least one
+flipped instance and behave identically on the two variants;
+the \#flip count excludes instances of the same graph that \OrigDecom already
+solves.
+A few further graphs, whose flip behavior differs between the two
+variants, are omitted for space. For the \OptDecom-available graphs this list is
+exhaustive; for the \OptDecom-unavailable graphs it covers the instances that
+\HeurDecom solves and on which we also ran \OrigDecom.
+
+
+\begin{comment}    
+We call an instance \emph{flipped} when \OrigDecom cannot solve it within $30$ minutes but \HeurDecom or \OptDecom can, and we now look at the width of their decompositions.
+Tables~\ref{tab:flips-common} and~\ref{tab:flips-diff} list every graph that has at least one flipped instance,
+together with the width under each available decomposition and the number of
+flipped instances per graph; for several graphs the remaining instances are
+already solved by \OrigDecom and are not counted. For the \OptDecom-available
+graphs this list is exhaustive; for the \OptDecom-unavailable graphs it covers the
+instances that \HeurDecom solves and on which we also ran \OrigDecom.
+Table~\ref{tab:flips-common} collects the graphs that behave identically on the two
+variants, and Table~\ref{tab:flips-diff} the few that do not.
+\end{comment}
+
+
+On these graphs the width drops once the edges are reordered, and the reduction is
+what unlocks the solve: \OrigDecom
+leaves the width too large for \textsc{ddreconf}, while \HeurDecom or \OptDecom
+brings it into the solvable range.  By construction, the width of \OrigDecom is at
+least that of \HeurDecom, which in turn is at least that of \OptDecom, on every
+graph; the tables show this ordering directly. This is exactly what the nesting of
+the solved sets reflects: a narrower decomposition never loses a solve and only
+adds instances. 
+
 
 
 
 \section{Analyses}
+\label{sec:analyses}
 
-\subsection{Effect on the Solution-Space ZDD}
+The previous section left us with two observations: reordering the input edges
+along a path decomposition lets \textsc{ddreconf} solve more instances, and the width of that decomposition affects solvability. We now ask where these gains come from.
+The place to look is the ZDDs the solver builds, so we follow the effect of width
+through both phases of \textsc{ddreconf}: the initial construction of the
+solution-space ZDD $\zsol$, and the transition computations that rebuild a ZDD $\Z^i$ at every step $i$ of the search.
+
+\subsection{The First Phase: Building the Solution-Space ZDD}
 \label{subsec:zddsize}
 
-We next measure how the reduced width translates into a smaller solution-space
-ZDD, i.e., the ZDD $\zsol$ built in the first phase of \textsc{ddreconf}.
-To compare the three decompositions on a common footing, we restrict attention to the
-instances solved by all three decompositions within the time limit ($210$ instances for
-the shortest variant and $208$ for the farthest variant), so that every decomposition
-produces a value for every instance.
-%% TODO: revisit whether to restrict to commonly solved instances (handoff
-%% item 4-4). The maximum is now reported alongside the median.
-Table~\ref{tab:zddsize} reports, for each decomposition and each variant, the
-median and the maximum of the width, the solution-space ZDD size, the first-phase
-construction time, and the peak memory, over those instances.
+We start with the first phase, the solution-space ZDD $\zsol$. To put the three
+decompositions on equal footing we restrict attention to the instances that all
+three solve within the time limit ($210$ on the shortest variant, $208$ on the
+farthest), so that each decomposition yields a value for every instance.
+Table~\ref{tab:zddsize} reports, for each decomposition and variant, the geometric
+mean and the maximum of the width, the solution-space ZDD size (the number of ZDD nodes), the first-phase
+construction time, the total solving time, and the peak memory over these
+instances.
+
+The solution-space ZDD shrinks steadily as the width falls, and the gap widens
+sharply on the hardest instances. Its geometric-mean size drops from $3{,}011$
+nodes under \OrigDecom to $1{,}191$ under \HeurDecom and $971$ under \OptDecom.
+Construction time and peak memory follow the same pattern, as
+Table~\ref{tab:zddsize} shows. This is the behavior predicted by the analysis of
+the first phase~\cite{inoue16}: across these instances the Spearman correlation
+between width and ZDD size is $0.66$, confirming experimentally the link between
+width and ZDD size that motivates the reordering. 
+As with the widths themselves,
+\HeurDecom recovers most of what \OptDecom offers, reaching about $80\%$ of the
+optimal geometric-mean reduction in ZDD size.
+
+This aggregate picture has exceptions at the level of individual instances: a
+narrower decomposition does not always yield a smaller ZDD, because the width of a
+decomposition only gives an upper bound on the ZDD size~\cite{inoue16}, which still
+leaves the construction free to produce ZDDs of different sizes. On about $37\%$ of
+the commonly-solved instances, the ZDD under \OptDecom is in fact slightly larger
+than under \OrigDecom. But the difference is marginal, at most $7\%$ in size and at
+most $120$ nodes in absolute terms.
+Every such case has a small ZDD, of at most
+$2{,}136$ nodes under \OrigDecom. 
+We note that, across the commonly-solved instances, the ZDD under
+\OrigDecom ranges from $8$ to $1.4\times10^{8}$ nodes, and hence every reversal sits at the
+very bottom of this range. 
+Therefore, where the construction cost actually matters, no such
+reversal occurs and \OptDecom always yields the smallest ZDD. 
+Therefore, narrower decompositions never lose ground where it counts, which is why the
+geometric mean and the maximum in Table~\ref{tab:zddsize} favor them so clearly.
 
 \begin{table*}[t]
   \centering
@@ -812,7 +972,7 @@ construction time, and the peak memory, over those instances.
   within the time limit ($210$ for the shortest variant, $208$ for the farthest).
   For each quantity we report the geometric mean and the maximum over those
   instances: the decomposition width, the solution-space ZDD size (number of
-  nodes), the first-phase ZDD construction time, the total wall-clock solving
+  ZDD nodes), the first-phase ZDD construction time, the total wall-clock solving
   time, and the peak resident memory.}
   \label{tab:zddsize}
   \setlength{\tabcolsep}{4pt}
@@ -821,8 +981,8 @@ construction time, and the peak memory, over those instances.
     & & \multicolumn{2}{c|}{width} & \multicolumn{2}{c|}{ZDD size}
       & \multicolumn{2}{c|}{constr.\ time [s]} & \multicolumn{2}{c|}{total time [s]}
       & \multicolumn{2}{c}{memory [MB]} \\
-    variant & decomp. & geo. & max & geo. & max & geo. & max
-      & geo. & max & geo. & max \\
+    variant & decomposition & geom. mean & max & geom. mean & max & geom. mean & max
+      & geom. mean & max & geom. mean & max \\
     \hline
     \multirow{3}{*}{shortest}
       & \OrigDecom & $34.5$ & $611$ & $3{,}011$ & $142{,}539{,}591$ & $0.183$ & $1497.2$ & $3.04$ & $1711.7$ & $282$ & $137{,}248$ \\
@@ -837,26 +997,6 @@ construction time, and the peak memory, over those instances.
   \end{tabular}
 \end{table*}
 
-While a typical instance yields a small solution-space ZDD under every
-decomposition, so that the medians are comparable, the benefit of a narrow
-decomposition is decisive on the hardest instances: the largest solution-space
-ZDD falls from over $1.4\times10^{8}$ nodes under \OrigDecom to about
-$7.9\times10^{5}$ under \HeurDecom and $4.0\times10^{5}$ under \OptDecom, with a
-comparable gap in peak memory.
-For the shortest variant, relative to \OrigDecom the per-instance reduction in
-ZDD size has a geometric mean of $2.53\times$ for \HeurDecom and $3.10\times$ for
-\OptDecom; the corresponding reductions in first-phase construction time and peak
-memory are $2.4\times$ and $1.7\times$ for \HeurDecom, and $2.5\times$ and
-$1.8\times$ for \OptDecom. The farthest variant shows the same pattern
-($2.42\times$ and $2.96\times$ in ZDD size for \HeurDecom and \OptDecom).
-Across these commonly solved instances, smaller width is consistently associated
-with a smaller solution-space ZDD: the Spearman rank correlation between
-width and ZDD size is $0.66$, and that between ZDD size and total solving
-time is $0.51$.
-As in the width comparison, \HeurDecom captures most of the benefit of
-\OptDecom: it attains essentially the same width (median per-graph ratio $1.00$)
-and about $80\%$ of the optimal geometric-mean reduction in the size of the
-solution-space ZDD.
 
 %% =====================================================================
 %% Draft subsection: Path Decomposition in the Second Phase
@@ -865,203 +1005,125 @@ solution-space ZDD.
 %% independent of the time limit; the 30 vs 40 min difference does not affect
 %% any statement below).
 %% =====================================================================
-\subsection{Path Decomposition in the Second Phase}
+\subsection{The Second Phase: Rebuilding the ZDD at Each Step}
 \label{subsec:secondphase}
+What is specific to reconfiguration is the second phase, where the solver rebuilds a
+ZDD $\Z^i$ at every step of the search; this is where we now look. Each $\Z^i$
+represents a slice of the solution space $\zsol$, and hence a natural expectation is
+that a narrower decomposition shrinks the intermediate ZDDs as well. The question is
+whether this expectation holds, and how the effect compares with the one in the
+first phase. We measure the second phase by the peak intermediate ZDD size,
+$\max_i|\Z^i|$, and we restrict attention to the commonly-solved instances ($210$ on
+the shortest variant, $208$ on the farthest), where every run reaches the end of its
+search and the peak is the true maximum rather than a value cut off by the time
+limit.
 
-The width of a decomposition is known to control the size of the solution-space
-ZDD $\zsol$ built in the first phase. It is far less obvious whether it also
-controls the \emph{second} phase, in which a new ZDD $Z^i$ is constructed at
-every reconfiguration step. To examine this we recorded, for a diverse set of
-$29$ instances, the node count of every intermediate ZDD $Z^i$ under each of the
-three decompositions. Because these node counts are determined by the
-decomposition alone, the comparison below is independent of the time limit.
+The expectation broadly holds. The first-phase and second-phase reductions move
+together: across the commonly-solved instances, the Spearman correlation between the
+$\zsol$ reduction and the peak-$|\Z^i|$ reduction (\OrigDecom over \OptDecom) is
+$0.64$. Nonetheless, the effect is weaker in the second phase than in the first. Over
+the commonly-solved instances, the $\zsol$ reduction has a geometric mean of
+$3.1\times$, but the peak-$|\Z^i|$ reduction only $1.4\times$, and on $80\%$ of the
+instances the second-phase reduction is no larger than the first.
+Figure~\ref{fig:sp-scatter} shows this directly: the points lie below the diagonal.
+In particular, every instance whose first-phase reduction is below $1.2\times$ also
+has a second-phase reduction below $1.4\times$. 
+This implies that when the \OrigDecom decomposition builds a small $\zsol$, it can also build small intermediate ZDDs.
 
-\paragraph{The first-phase benefit extends to the second phase.}
-Whenever a narrower decomposition shrinks $\zsol$, it shrinks each intermediate
-$Z^i$ by a comparable factor. Figure~\ref{fig:sp-traj}(left) shows a
-representative case: on \textsf{mug88\_1} (widths $31/11/5$ for
-\OrigDecom/\HeurDecom/\OptDecom) the peak intermediate ZDD reaches
-$1.4\times10^{6}$ nodes under \OrigDecom but only $3.7\times10^{4}$ under
-\HeurDecom and $5.0\times10^{3}$ under \OptDecom, a $281\times$ reduction, even
-though all three runs complete. Comparable reductions of the peak intermediate
-ZDD recur across the benchmark, for example $216\times$ on \textsf{miles500\_02},
-$57\times$ on \textsf{huck}, and $15\times$ on \textsf{ph-04-03}. Over the
-instances on which all three decompositions complete, the per-instance
-second-phase reduction is strongly rank-correlated with the first-phase
-reduction (Spearman $0.91$). The decomposition therefore acts on the whole
-computation, not only on the construction of $\zsol$.
-
-\paragraph{The reduction is sub-proportional.}
-The second-phase reduction is consistently smaller than the first-phase
-reduction (Figure~\ref{fig:sp-scatter}): on \textsf{miles500\_02} the
-solution-space ZDD shrinks by a factor of $5.8\times10^{3}$ but the peak
-intermediate ZDD only by $216$. This is expected, since each $Z^i$ represents
-the wavefront of solutions reachable in exactly $i$ steps, a subset of $\zsol$
-whose size is bounded independently of the decomposition. Even so, the
-decomposition yields one to two orders of magnitude of second-phase savings on
-the harder instances.
-
-\paragraph{Both failure modes are relieved.}
-Among the instances that \OrigDecom fails to solve within the time limit but
-\HeurDecom or \OptDecom solves, the bottleneck lies in different phases
-depending on the width. For high widths (\textsf{queen8\_12}, width $85$;
-\textsf{games120}, width $91$) \OrigDecom cannot even build $\zsol$, so no
-intermediate ZDD is ever produced: a first-phase failure. For moderate widths
-(\textsf{mug}, widths $26$--$32$) \OrigDecom builds $\zsol$ quickly but the
-intermediate ZDDs explode, reaching $1$--$2\times10^{6}$ nodes within the first
-$14$--$15$ of about $20$ steps before timing out: a second-phase failure, whose
-mechanism is confirmed by the completed sibling \textsf{mug88\_1} above. A narrow
-decomposition removes the bottleneck wherever it occurs.
-
-\paragraph{When width is uninformative.}
-For a class of structured instances the pathwidth is a loose upper bound and
-predicts neither phase. On \textsf{suzuki} (widths up to $611$) and
-\textsf{DSJR500.1c} (width $496$) both $\zsol$ and every $Z^i$ remain small under
-all three decompositions, and reordering by width yields no benefit
-(Figure~\ref{fig:sp-traj}, right). An extreme case is \textsf{SAT\_exp\_012},
-where $\zsol$ shrinks by $3.4\times10^{3}$ yet the peak intermediate ZDD is
-essentially unchanged at about $1.1\times10^{3}$ nodes under every decomposition.
-Across all runs and decompositions the correlation between the nominal width and
-the peak intermediate ZDD size is consequently weak (Spearman $0.34$), even
-though the within-instance effect is strong wherever the width genuinely binds.
-This is why a second-phase trend is invisible in aggregate but clear once such
-loose-bound instances are separated.
-
-\paragraph{Long sequences.}
-Finally, the second phase makes very long reconfiguration sequences tractable
-precisely because the per-step ZDD is width-bounded. On the \textsf{hc-power}
-family (width $5$) the intermediate ZDD stays near $5{,}000$ nodes across up to
-$221{,}003$ steps, with the three decompositions coinciding; here the
-reconfiguration length, not the per-step ZDD size, governs the total cost.
+However, a narrower decomposition still brings a clear benefit; specifically, where the first phase gains a lot, so does the second. 
+On the instances where $\zsol$ shrinks by at least $10\times$, the peak intermediate ZDD shrinks by a
+median of about $5\times$, and a narrower decomposition keeps its advantage through
+the search. Figure~\ref{fig:sp-traj} illustrates this on \textsf{mug88\_1}: the peak
+intermediate ZDDs under \OrigDecom, \HeurDecom, and \OptDecom are $1.4\times10^{6}$,
+$3.7\times10^{4}$, and $5.0\times10^{3}$ nodes, respectively.
 
 %% --------------------------------------------------------------------
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{fig_secondphase_trajectory.pdf}
-  \caption{Intermediate ZDD size $|Z^i|$ at each reconfiguration step $i$ (log
-  scale, shortest variant). Left: \textsf{mug88\_1}, where the decompositions
-  differ in width ($31/11/5$); the per-step ZDD is up to two orders of magnitude
-  larger under \OrigDecom. Right: \textsf{suzuki\_2\_20}, whose pathwidth is a
-  loose upper bound ($611$ vs $14$); the three curves coincide, so reordering by
-  width gives no benefit.}
-  \label{fig:sp-traj}
+  \includegraphics[width=0.45\linewidth]{fig_secondphase_scatter.revised.pdf}
+  \caption{Second-phase reduction (ratio of peak intermediate ZDD sizes,
+  \OrigDecom over \OptDecom) against first-phase reduction (ratio of
+  solution-space ZDD sizes), one point per commonly-solved instance of the shortest variant.}
+  \label{fig:sp-scatter}
 \end{figure}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.82\linewidth]{fig_secondphase_scatter.pdf}
-  \caption{Second-phase reduction (ratio of peak intermediate ZDD sizes,
-  \OrigDecom over \OptDecom) against first-phase reduction (ratio of
-  solution-space ZDD sizes), one point per instance, log--log. Points lie below
-  the diagonal: the second-phase reduction tracks the first-phase reduction but
-  is sub-proportional. The cluster near $(1,1)$ are instances whose pathwidth is
-  a loose upper bound (\textsf{suzuki}, \textsf{DSJR}, \textsf{sp},
-  \textsf{hc-power}); \textsf{SAT\_exp} is an extreme decoupling case.}
-  \label{fig:sp-scatter}
+  \includegraphics[width=0.45\linewidth]{fig_secondphase_trajectory.revised.pdf}
+    \caption{Intermediate ZDD size $|\Z^i|$ at each reconfiguration step $i$ on
+  \textsf{mug88\_1} (shortest variant), under \OrigDecom, \HeurDecom, and
+  \OptDecom, whose widths are $31$, $11$, and $5$, respectively.}
+  \label{fig:sp-traj}
 \end{figure}
+
 
 \subsection{Reconfiguration Length}
 \label{subsec:reconflength}
 
-A distinctive strength of the ZDD-based approach is its handling of long
-reconfiguration sequences.
-By \PSPACE-completeness, a shortest reconfiguration sequence may be
-super-polynomially long (Section~\ref{subsec:isr}).
-Because \textsc{ddreconf} advances its breadth-first search by one transition
-layer at a time on top of a compressed solution-space ZDD, rather than unrolling
-the sequence length explicitly, it can in principle reach such long sequences.
-We examine this on our data.
+One distinctive strength of the ZDD-based approach is its reach into very long
+reconfiguration sequences. By \PSPACE-completeness, some instances have a shortest
+reconfiguration sequence of super-polynomial length unless $\PSPACE = \NP$
+(Section~\ref{subsec:isr}). Indeed, even if we restrict to only the instances solved
+within the time limit, the shortest reconfiguration lengths in the benchmark span
+from $1$ to about $2.2\times10^{5}$. Figure~\ref{fig:reconf-length} plots, for every
+instance solved under \HeurDecom, the end-to-end solving time against the shortest
+reconfiguration length $\ell$, coloring each point by the width of its \HeurDecom
+decomposition.
 
-The instances span more than five orders of magnitude in $\ell$, from $1$ up to
-about $2.2\times10^{5}$, and all are solved within the limit.
-
-The longest sequences are reached precisely because they occur in narrow graphs.
-Figure~\ref{fig:reconf-length} plots, for every instance solved under
-\HeurDecom, the end-to-end solving time against $\ell$, with each point colored
-by the width of its decomposition.
-Two regimes are visible.
-The long-sequence instances, forming the diagonal band on the right up to
-$\ell\approx2.2\times10^{5}$, all have small width and are solved cheaply,
-with time growing only gently with $\ell$.
-The instances that approach the $30$-minute limit, by contrast, have short
-sequences but large width.
-Difficulty is therefore governed by width, not by sequence length: once the
-width is controlled for, solving time grows roughly linearly in $\ell$ (the
-fitted exponent is about $0.9$), so the per-step cost, not the number of steps,
-is what makes an instance hard.
-This is why \textsc{ddreconf} reaches very long sequences: they live in narrow
-graphs where each transition step is inexpensive.
-The most extreme case is a power-network instance with $199$ vertices, $302$
-edges, and width $5$, whose shortest variant admits a sequence of length
-$\ell=221{,}003$ and is solved in about $1{,}700$ seconds (its farthest variant,
-$\ell=221{,}016$, is comparable).
+Two patterns are visible in \figurename~\ref{fig:reconf-length}. First, the long
+sequences, up to $\ell\approx2.2\times10^{5}$, are solved only at small width: every
+solved instance with $\ell\geq100$ has width at most $23$, with a median of $10$,
+whereas no instance of large width reaches such lengths within the limit. These
+long-sequence instances are solved cheaply, and their solving time does not blow up
+exponentially with $\ell$: on the log--log axes, their points do not curve upward
+but follow a nearly straight trend, so the length enters the cost only polynomially.
+Second, the short sequences are solved across a wide range of widths, including
+large ones. Here the solving time grows with the width: the widest instances are the
+slowest, taking close to the $30$-minute limit.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{reconf_length_time.pdf}
+  \includegraphics[width=0.6\linewidth]{reconf_length_time.revised.pdf}
   \caption{End-to-end solving time versus reconfiguration sequence length $\ell$
   for instances solved within $30$ minutes under \HeurDecom, for the
-  (a) shortest and (b) farthest variant. Each point is one instance, colored by
-  the width of its decomposition. Solving time stays low for the longest
-  sequences, which all have small width, while the instances near the time limit
-  have short sequences but large width: width, not sequence length, governs
-  difficulty.}
+  shortest variant. Each point is one instance, colored by
+  the width of its decomposition.}
   \label{fig:reconf-length}
 \end{figure}
 
-
-
-
-
 \begin{comment}
-\section{Analysis}
-\label{sec:analysis}
-
-\subsection{Bottlenecks of ZDD-Based Solvers}
-\begin{itemize}
-\item Solution-space ZDD construction tends to produce large numbers of ZDD nodes.
-\item ZDD node counts also grow during transition computation in reconfiguration search.
-\item Include plots illustrating these bottlenecks if available.
-\end{itemize}
-
-\subsection{Effect on Solution-Space ZDD Size}
-\begin{itemize}
-\item Analyze how path decomposition reduces the number of ZDD nodes at construction time.
-\item Compare ZDD sizes with and without path-decomposition-based preprocessing across benchmark instances.
-\end{itemize}
-
-\subsection{Effect on ZDD Size During Reconfiguration}
-\begin{itemize}
-\item Analyze how path decomposition affects intermediate ZDD sizes during transition computation.
-\item Explain why smaller intermediate ZDDs lead to faster reconfiguration search.
-\end{itemize}
-
-\section{Experimental Results}
-\label{sec:experiments}
-
-\subsection{Comparison with \textsc{ddreconf}}
-\begin{itemize}
-\item Experimental setup: hardware, benchmark suites, time limits, and parameter settings.
-\item Compare runtime, memory usage, and solved instance counts between the proposed solver and \textsc{ddreconf}.
-\item Summarize the overall performance improvement.
-\end{itemize}
-
-\subsection{Newly Solved Instances}
-\begin{itemize}
-\item Table listing benchmark instances from the CoRe Challenge 2022 and 2023 solved for the first time by our solver.
-\item Brief discussion of the characteristics of these instances.
-\item \KJ{TODO}{Replace ``xxx'' with the actual number of newly solved instances.}
-\end{itemize}
+The most extreme instance is a power-network graph (the \textsf{hc-power} family) with $199$
+vertices, $302$ edges, and width $5$. Its shortest variant has a sequence of length
+$\ell=221{,}003$, throughout which the intermediate ZDD remains around $5{,}000$
+nodes and the three decompositions coincide, and it is solved in about $1{,}700$
+seconds; its farthest variant, $\ell=221{,}016$, is comparable.
 \end{comment}
+
+\section{Artifact and Reproducibility}
+\label{sec:artifact}
+
+To support reproducibility and future comparisons, we release a complete artifact package comprising all source codes, raw log files, and scripts to generate tables and plots. The artifact is publicly available at: \url{https://shorturl.at/umgzF}.
+
+
 
 \section{Conclusion}
 \label{sec:conclusion}
+
+We studied how reordering the input edges along a path decomposition of small width affects the ZDD-based solver \textsc{ddreconf}: with no change to the solver, it solves more instances. 
+The benefit of a smaller width is known for the first phase, constructing the solution space $\zsol$. 
+We showed that it appears in the second phase as well, which is specific to reconfiguration, where the solver rebuilds a ZDD at every reconfiguration step. 
+We emphasize that the heuristic decomposition recovers most of the benefit of the optimal one at a small fraction of the cost, making it a compelling choice in practice. 
+
+
+\begin{comment}
 \begin{itemize}
-\item Summarize the finding that path decomposition is an effective preprocessing technique for ZDD-based ISR solvers.
+\item Summarize the finding that path decomposition is an effective preprocessing technique for ZDD-based \ISR solvers.
 \item Emphasize that heuristic path decompositions are sufficient for practical performance gains.
 \item Mention the newly solved CoRe Challenge instances.
 \item Future work: extension to other reconfiguration problems, tighter integration with other ZDD heuristics, etc.
 \end{itemize}
+\end{comment}
+
 
 \bibliographystyle{IEEEtran}
 \bibliography{bib}
