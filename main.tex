@@ -308,7 +308,7 @@ step at a time until a reconfiguration sequence is found. A small-width
 decomposition is known to help the first stage, the construction of the
 solution-space ZDD. It has remained unclear how much it helps the solver as a
 whole, once one also accounts for the cost of the repeated transition computations
-and for the cost of computing the decomposition in the first place.
+and for the cost of computing the path decomposition in the first place.
 
 
 
@@ -769,13 +769,13 @@ For \HeurDecom and \OptDecom, the computed path decomposition is used purely as
 preprocessing: we encode it as a reordered DIMACS file and run the unmodified
 \textsc{ddreconf} on that file. 
 % ------------ inserted by Soh 26.07.18 start -----------
-Formally, the oredering is defined as follows.
+Formally, the ordering in DIMACS file is defined as follows.
 Let \(\pi=(v_1,\ldots,v_n)\) be the vertex ordering obtained from the path decomposition, and let \(\mathrm{pos}_\pi(v)\) denote the position of \(v\) in \(\pi\). For each edge 
 \(e=\{u,v\}\), we define
 \[
 p(e)=\min\{\mathrm{pos}_\pi(u),\mathrm{pos}_\pi(v)\}.
 \]
-We reorder the DIMACS edge lines in nondecreasing order of \(p(e)\), preserving their original relative order in case of ties. We then compute the width of the path decomposition  associated with the resulting edge order using the construction of Kobayashi and Nakahata~\cite{KobayashiNakahata2020}. The associated width is used throughout our experimental analysis. The solver itself is identical across all runs; only the input file differs.
+We reorder the DIMACS edge lines in nondecreasing order of \(p(e)\), preserving their original relative order in case of ties. We then compute the width of the path decomposition  associated with the resulting edge order using the construction of Kobayashi and Nakahata~\cite{KobayashiNakahata2020}. The associated width is used throughout our experimental analysis. 
 % ------------ inserted by Soh 26.07.18 end -----------
 For \OrigDecom, the solver simply runs on the
 input file as given. The solver itself is identical across all runs; only the input file differs. 
