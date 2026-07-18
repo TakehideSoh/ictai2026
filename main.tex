@@ -767,7 +767,17 @@ completion.
 
 For \HeurDecom and \OptDecom, the computed path decomposition is used purely as
 preprocessing: we encode it as a reordered DIMACS file and run the unmodified
-\textsc{ddreconf} on that file. For \OrigDecom, the solver simply runs on the
+\textsc{ddreconf} on that file. 
+% ------------ inserted by Soh 26.07.18 start -----------
+Formally, the oredering is defined as follows.
+Let \(\pi=(v_1,\ldots,v_n)\) be the vertex ordering obtained from the path decomposition, and let \(\mathrm{pos}_\pi(v)\) denote the position of \(v\) in \(\pi\). For each edge 
+\(e=\{u,v\}\), we define
+\[
+p(e)=\min\{\mathrm{pos}_\pi(u),\mathrm{pos}_\pi(v)\}.
+\]
+We reorder the DIMACS edge lines in nondecreasing order of \(p(e)\), preserving their original relative order in case of ties. We then compute the width of the path decomposition  associated with the resulting edge order using the construction of Kobayashi and Nakahata~\cite{KobayashiNakahata2020}. The associated width is used throughout our experimental analysis. The solver itself is identical across all runs; only the input file differs.
+% ------------ inserted by Soh 26.07.18 end -----------
+For \OrigDecom, the solver simply runs on the
 input file as given. The solver itself is identical across all runs; only the input file differs. 
 Therefore, any difference in running time, memory usage, or the number of solved instances is attributable to the input file alone.
 
